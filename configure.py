@@ -93,6 +93,12 @@ parser.add_argument('--coverage',
     default=None,
     help='Build node with code coverage enabled')
 
+parser.add_argument('--cheri',
+    action='store_true',
+    dest='cheri',
+    default=None,
+    help='compile with cheri')
+
 parser.add_argument('--debug',
     action='store_true',
     dest='debug',
@@ -1335,6 +1341,7 @@ def configure_node_lib_files(o):
   o['variables']['node_library_files'] = SearchFiles('lib', 'js')
 
 def configure_node(o):
+  o['variables']['cheri'] = options.cheri
   if options.dest_os == 'android':
     o['variables']['OS'] = 'android'
   o['variables']['node_prefix'] = options.prefix

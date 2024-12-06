@@ -469,6 +469,15 @@
     },
 
     'conditions': [
+      ['cheri=="true"', {
+        'cflags': [ '-I/usr/include -I/usr/include/c++/v1 --target=aarch64c-unknown-freebsd -mabi=purecap -march=morello -Xclang -morello-vararg=new', ],
+        'ldflags': [
+          '-mabi=purecap',
+        ],
+        'asmflags': [
+          '-march=morello -mabi=purecap',
+        ],
+      }],
       ['clang==0 and OS!="win"', {
         'cflags': [ '-Wno-restrict', ],
       }],
