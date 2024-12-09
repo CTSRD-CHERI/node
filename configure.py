@@ -1341,7 +1341,7 @@ def configure_node_lib_files(o):
   o['variables']['node_library_files'] = SearchFiles('lib', 'js')
 
 def configure_node(o):
-  o['variables']['cheri'] = options.cheri
+  o['variables']['cheri'] = b(options.cheri)
   if options.dest_os == 'android':
     o['variables']['OS'] = 'android'
   o['variables']['node_prefix'] = options.prefix
