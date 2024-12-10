@@ -335,12 +335,23 @@
 
     'conditions': [
       ['cheri=="true"', {
-        'cflags': [ '-I/usr/include -I/usr/include/c++/v1 --target=aarch64c-unknown-freebsd -mabi=purecap -march=morello -Xclang -morello-vararg=new', ],
+        'cflags': [
+	  '-I/usr/include',
+	  '--target=aarch64c-unknown-freebsd',
+	  '-mabi=purecap',
+	  '-march=morello',
+	  '-Xclang',
+	  '-morello-vararg=new',
+	],
+	'cflags_cc': [
+	  '-I/usr/include/c++/v1',
+	],
         'ldflags': [
           '-mabi=purecap',
         ],
         'asmflags': [
-          '-march=morello -mabi=purecap',
+          '-march=morello',
+	  '-mabi=purecap',
         ],
       }],
       [ 'configuring_node', {
