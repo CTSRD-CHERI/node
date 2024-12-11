@@ -345,6 +345,8 @@
 	],
 	'cflags_cc': [
 	  '-I/usr/include/c++/v1',
+	  # this gets triggered for unknown reason, so suppress for now
+	  '-Wno-invalid-offsetof',
 	],
         'ldflags': [
           '-mabi=purecap',
