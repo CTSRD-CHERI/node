@@ -461,7 +461,7 @@ static inline uint64_t AddTraceEventImpl(
     const char** arg_names, const uint8_t* arg_types,
 #if defined(__CHERI_PURE_CAPABILITY__)
     const uintptr_t* arg_values, unsigned int flags) {
-#else	
+#else
     const uint64_t* arg_values, unsigned int flags) {
 #endif
   std::unique_ptr<v8::ConvertableToTraceFormat> arg_convertibles[2];
@@ -512,7 +512,11 @@ static V8_INLINE uint64_t AddTraceEventWithTimestampImpl(
 static V8_INLINE void AddMetadataEventImpl(
     const uint8_t* category_group_enabled, const char* name, int32_t num_args,
     const char** arg_names, const uint8_t* arg_types,
+#if defined(__CHERI_PURE_CAPABILITY__)
+    const uintptr_t* arg_values, unsigned int flags) {
+#else
     const uint64_t* arg_values, unsigned int flags) {
+#endif
   std::unique_ptr<v8::ConvertableToTraceFormat> arg_convertibles[2];
   if (num_args > 0 && arg_types[0] == TRACE_VALUE_TYPE_CONVERTABLE) {
     arg_convertibles[0].reset(reinterpret_cast<v8::ConvertableToTraceFormat*>(
@@ -533,6 +537,17 @@ static V8_INLINE void AddMetadataEventImpl(
 // Define SetTraceValue for each allowed type. It stores the type and
 // value in the return arguments. This allows this API to avoid declaring any
 // structures so that it is portable to third_party libraries.
+#if defined(__CHERI_PURE_CAPABILITY__)
+#define INTERNAL_DECLARE_SET_TRACE_VALUE(actual_type, union_member,         \
+                                         value_type_id)                     \
+  static inline void SetTraceValue(actual_type arg, unsigned char* type,    \
+                                   uintptr_t* value) {                      \
+    TraceValueUnion type_value;                                             \
+    type_value.union_member = arg;                                          \
+    *type = value_type_id;                                                  \
+    *value = static_cast<uintptr_t>(type_value.as_uint);                    \
+  }
+#else
 #define INTERNAL_DECLARE_SET_TRACE_VALUE(actual_type, union_member,         \
                                          value_type_id)                     \
   static inline void SetTraceValue(actual_type arg, unsigned char* type,    \
@@ -542,13 +557,23 @@ static V8_INLINE void AddMetadataEventImpl(
     *type = value_type_id;                                                  \
     *value = type_value.as_uint;                                            \
   }
+#endif
 // Simpler form for int types that can be safely casted.
+#if defined(__CHERI_PURE_CAPABILITY__)
+#define INTERNAL_DECLARE_SET_TRACE_VALUE_INT(actual_type, value_type_id)    \
+  static inline void SetTraceValue(actual_type arg, unsigned char* type,    \
+                                   uintptr_t* value) {                      \
+    *type = value_type_id;                                                  \
+    *value = static_cast<uintptr_t>(arg);                                   \
+  }
+#else
 #define INTERNAL_DECLARE_SET_TRACE_VALUE_INT(actual_type, value_type_id)    \
   static inline void SetTraceValue(actual_type arg, unsigned char* type,    \
                                    uint64_t* value) {                       \
     *type = value_type_id;                                                  \
     *value = static_cast<uint64_t>(arg);                                    \
   }
+#endif
 
 INTERNAL_DECLARE_SET_TRACE_VALUE_INT(uint64_t, TRACE_VALUE_TYPE_UINT)
 INTERNAL_DECLARE_SET_TRACE_VALUE_INT(unsigned int, TRACE_VALUE_TYPE_UINT)
@@ -571,15 +596,27 @@ INTERNAL_DECLARE_SET_TRACE_VALUE(const TraceStringWithCopy&, as_string,
 #undef INTERNAL_DECLARE_SET_TRACE_VALUE_INT
 
 static inline void SetTraceValue(v8::ConvertableToTraceFormat* convertable_value,
+#if defined(__CHERI_PURE_CAPABILITY__)
+                                    unsigned char* type, uintptr_t* value) {
+#else
                                     unsigned char* type, uint64_t* value) {
+#endif
   *type = TRACE_VALUE_TYPE_CONVERTABLE;
+#if defined(__CHERI_PURE_CAPABILITY__)
+  *value = reinterpret_cast<uintptr_t>(convertable_value);
+#else
   *value = static_cast<uint64_t>(reinterpret_cast<intptr_t>(convertable_value));
+#endif
 }
 
 template <typename T>
 static inline typename std::enable_if<
     std::is_convertible<T*, v8::ConvertableToTraceFormat*>::value>::type
+#if defined(__CHERI_PURE_CAPABILITY__)
+SetTraceValue(std::unique_ptr<T> ptr, unsigned char* type, uintptr_t* value) {
+#else
 SetTraceValue(std::unique_ptr<T> ptr, unsigned char* type, uint64_t* value) {
+#endif
   SetTraceValue(ptr.release(), type, value);
 }
 
@@ -696,7 +733,11 @@ static V8_INLINE void AddMetadataEvent(
     const char* arg1_name, ARG1_TYPE&& arg1_val) {
   const int num_args = 1;
   uint8_t arg_type;
+#if defined(__CHERI_PURE_CAPABILITY__)
+  uintptr_t arg_value;
+#else
   uint64_t arg_value;
+#endif
   SetTraceValue(std::forward<ARG1_TYPE>(arg1_val), &arg_type, &arg_value);
   AddMetadataEventImpl(
       category_group_enabled, name, num_args, &arg1_name, &arg_type, &arg_value,

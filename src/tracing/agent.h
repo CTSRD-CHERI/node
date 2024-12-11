@@ -45,7 +45,11 @@ class TracingController : public v8::platform::tracing::TracingController {
       int num_args,
       const char** arg_names,
       const unsigned char* arg_types,
+#if defined(__CHERI_PURE_CAPABILITY__)
+      const uintptr_t* arg_values,
+#else
       const uint64_t* arg_values,
+#endif
       std::unique_ptr<v8::ConvertableToTraceFormat>* convertable_values,
       unsigned int flags);
 };
