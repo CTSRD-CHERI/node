@@ -520,6 +520,7 @@ void MacroAssembler::Mov(const Register& rd, const Operand& operand,
     } else {
       // Call the macro assembler for generic immediates.
       Mov(dst.X(), operand.ImmediateValue());
+      return;
     }
 #endif  // __CHERI_PURE_CAPABILITY__
     // Call the macro assembler for generic immediates.
@@ -548,7 +549,7 @@ void MacroAssembler::Mov(const Register& rd, const Operand& operand,
         (rd.Is32Bits() && (discard_mode == kDontDiscardForSameWReg))) {
 #if defined(__CHERI_PURE_CAPABILITY__)
       if (rd.IsC()) {
-	DCHECK(operand.reg().IsC());
+        DCHECK(operand.reg().IsC());
         Assembler::cpy(rd, operand.reg());
       } else {
         DCHECK(!operand.reg().IsC());
@@ -1108,7 +1109,7 @@ void MacroAssembler::AddSubWithCarryMacro(const Register& rd,
 void MacroAssembler::LoadStoreMacro(const CPURegister& rt,
                                     const MemOperand& addr, LoadStoreOp op) {
   int64_t offset = addr.offset();
-  unsigned size = CalcLSDataSize(op);
+  unsigned size = CalcLSDataSize(op, rt.IsC());
 
   // Check if an immediate offset fits in the immediate field of the
   // appropriate instruction. If not, emit two instructions to perform
@@ -1125,13 +1126,16 @@ void MacroAssembler::LoadStoreMacro(const CPURegister& rt,
     Register temp = temps.AcquireSameSizeAs(addr.base());
 #endif  // !__CHERI_PURE_CAPABILITY__
     Mov(temp, addr.offset());
+    DCHECK(addr.base().IsC());
     LoadStore(rt, MemOperand(addr.base(), temp), op);
   } else if (addr.IsPostIndex() && !IsImmLSUnscaled(offset)) {
     // Post-index beyond unscaled addressing range.
     LoadStore(rt, MemOperand(addr.base()), op);
+    DCHECK(addr.base().IsC());
     Add(addr.base(), addr.base(), offset);
   } else if (addr.IsPreIndex() && !IsImmLSUnscaled(offset)) {
     // Pre-index beyond unscaled addressing range.
+    DCHECK(addr.base().IsC());
     Add(addr.base(), addr.base(), offset);
     LoadStore(rt, MemOperand(addr.base()), op);
   } else {
@@ -1146,8 +1150,15 @@ void MacroAssembler::LoadStorePairMacro(const CPURegister& rt,
                                         LoadStorePairOp op) {
   if (addr.IsRegisterOffset()) {
     UseScratchRegisterScope temps(this);
+#ifdef __CHERI_PURE_CAPABILITY__
+    Register base = addr.base().C();
+#else   // !__CHERI_PURE_CAPABILITY__
     Register base = addr.base();
+#endif  // __CHERI_PURE_CAPABILITY__
     Register temp = temps.AcquireSameSizeAs(base);
+#ifdef __CHERI_PURE_CAPABILITY__
+    DCHECK(temp.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
     Add(temp, base, addr.regoffset());
     LoadStorePair(rt, rt2, MemOperand(temp), op);
     return;
@@ -1164,14 +1175,22 @@ void MacroAssembler::LoadStorePairMacro(const CPURegister& rt,
     // Encodable in one load/store pair instruction.
     LoadStorePair(rt, rt2, addr, op);
   } else {
+#ifdef __CHERI_PURE_CAPABILITY__
+    Register base = addr.base().C();
+#else   // !__CHERI_PURE_CAPABILITY__
     Register base = addr.base();
+#endif  // __CHERI_PURE_CAPABILITY__
     if (addr.IsImmediateOffset()) {
       UseScratchRegisterScope temps(this);
       Register temp = temps.AcquireSameSizeAs(base);
+#ifdef __CHERI_PURE_CAPABILITY__
+      DCHECK(temp.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
       Add(temp, base, offset);
       LoadStorePair(rt, rt2, MemOperand(temp), op);
     } else if (addr.IsPostIndex()) {
       LoadStorePair(rt, rt2, MemOperand(base), op);
+      DCHECK(base.IsC());
       Add(base, base, offset);
     } else {
       DCHECK(addr.IsPreIndex());
@@ -3248,8 +3267,14 @@ bool MacroAssembler::IsNearCallOffset(int64_t offset) {
 //    3. if it is not zero then it jumps to the builtin.
 void MacroAssembler::BailoutIfDeoptimized() {
   UseScratchRegisterScope temps(this);
+#ifdef __CHERI_PURE_CAPABILITY__
+  Register scratch = temps.AcquireC();
+  int offset =
+      InstructionStream::kCodeOffset - InstructionStream::kHeaderSize - 1;
+#else   // !__CHERI_PURE_CAPABILITY__
   Register scratch = temps.AcquireX();
   int offset = InstructionStream::kCodeOffset - InstructionStream::kHeaderSize;
+#endif  // __CHERI_PURE_CAPABILITY__
   LoadTaggedField(scratch,
                   MemOperand(kJavaScriptCallCodeStartRegister, offset));
   Ldr(scratch.W(), FieldMemOperand(scratch, Code::kFlagsOffset));
@@ -3737,7 +3762,11 @@ void MacroAssembler::EnterFrame(StackFrame::Type type) {
     // Just push a minimal "machine frame", saving the frame pointer and return
     // address, without any markers.
     Push<MacroAssembler::kSignLR>(lr, fp);
+#ifdef __CHERI_PURE_CAPABILITY__
+    Mov(cfp, csp);
+#else   // !__CHERI_PURE_CAPABILITY__
     Mov(fp, sp);
+#endif  // __CHERI_PURE_CAPABILITY__
     // sp[1] : lr
     // sp[0] : fp
   } else {
@@ -4036,7 +4065,7 @@ void MacroAssembler::LoadMap(Register dst, Register object) {
 void MacroAssembler::CompareInstanceType(Register map, Register type_reg,
                                          InstanceType type) {
   ASM_CODE_COMMENT(this);
-  Ldrh(type_reg, FieldMemOperand(map, Map::kInstanceTypeOffset));
+  Ldrh(type_reg.W(), FieldMemOperand(map, Map::kInstanceTypeOffset));
   Cmp(type_reg.W(), type);
 }
 

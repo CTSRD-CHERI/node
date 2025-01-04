@@ -250,6 +250,11 @@ Node* RepresentationChanger::GetRepresentationFor(
     case MachineRepresentation::kSimd256:
     case MachineRepresentation::kNone:
       return node;
+#ifdef __CHERI_PURE_CAPABILITY__
+    case MachineRepresentation::kCapability64:
+      // We don't need to change anything here.
+      return node;
+#endif  // __CHERI_PURE_CAPABILITY__
     case MachineRepresentation::kCompressed:
     case MachineRepresentation::kCompressedPointer:
     case MachineRepresentation::kSandboxedPointer:
@@ -538,6 +543,9 @@ Node* RepresentationChanger::GetTaggedRepresentationFor(
   }
   if (output_rep == MachineRepresentation::kTaggedSigned ||
       output_rep == MachineRepresentation::kTaggedPointer ||
+#ifdef __CHERI_PURE_CAPABILITY__
+      output_rep == MachineRepresentation::kCapability64 ||
+#endif  // __CHERI_PURE_CAPABILITY__
       output_rep == MachineRepresentation::kMapWord) {
     // this is a no-op.
     return node;

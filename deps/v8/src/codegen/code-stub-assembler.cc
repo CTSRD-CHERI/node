@@ -668,9 +668,15 @@ TNode<IntPtrT> CodeStubAssembler::PopulationCountFallback(
   // C++ code and comments from there for reference.
   // Fall back to divide-and-conquer popcount (see "Hacker's Delight" by Henry
   // S. Warren,  Jr.), chapter 5-1.
+#ifdef __CHERI_PURE_CAPABILITY__
+  constexpr uint64_t mask[] = {static_cast<uint64_t>(0x5555555555555555),
+                               static_cast<uint64_t>(0x3333333333333333),
+                               static_cast<uint64_t>(0x0f0f0f0f0f0f0f0f)};
+#else   // !__CHERI_PURE_CAPABILITY__
   constexpr uintptr_t mask[] = {static_cast<uintptr_t>(0x5555555555555555),
                                 static_cast<uintptr_t>(0x3333333333333333),
                                 static_cast<uintptr_t>(0x0f0f0f0f0f0f0f0f)};
+#endif  // __CHERI_PURE_CAPABILITY__
 
   // TNode<UintPtrT> value = Unsigned(value_word);
   TNode<UintPtrT> lhs, rhs;
@@ -1362,6 +1368,9 @@ TNode<HeapObject> CodeStubAssembler::AllocateRaw(TNode<IntPtrT> size_in_bytes,
                                                  AllocationFlags flags,
                                                  TNode<RawPtrT> top_address,
                                                  TNode<RawPtrT> limit_address) {
+  // TODO(cheri): Add proper bounds here. We can't be too strict yet because we
+  // don't know what we are allocating, but we can certainly bound to
+  // size_in_bytes as we currently have holes.
   Label if_out_of_memory(this, Label::kDeferred);
 
   // TODO(jgruber,jkummerow): Extract the slow paths (= probably everything
@@ -1382,6 +1391,13 @@ TNode<HeapObject> CodeStubAssembler::AllocateRaw(TNode<IntPtrT> size_in_bytes,
 
   TNode<RawPtrT> top = Load<RawPtrT>(top_address);
   TNode<RawPtrT> limit = Load<RawPtrT>(limit_address);
+
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(top_address.IsCapability());
+  DCHECK(limit_address.IsCapability());
+  DCHECK(top.IsCapability());
+  DCHECK(limit.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__
 
   // If there's not enough space, call the runtime.
   TVARIABLE(Object, result);
@@ -1431,11 +1447,15 @@ TNode<HeapObject> CodeStubAssembler::AllocateRaw(TNode<IntPtrT> size_in_bytes,
                                         Uint32Constant(alignment_mask)), &next);
 
 #if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(top.IsCapability());
     TNode<IntPtrT> rounded_top = IntPtrRoundUpToByteBoundary(
-        UncheckedCast<IntPtrT>(top), kSystemPointerSize);
+        UncheckedCast<IntPtrT>(top).MarkAsCapability(), kSystemPointerSize);
+    DCHECK(rounded_top.IsCapability());
     TNode<IntPtrT> padding_needed =
-        IntPtrSub(rounded_top, UncheckedCast<IntPtrT>(top));
+        IntPtrSub(rounded_top, UncheckedCast<IntPtrT>(top)).MarkAsInteger();
+    DCHECK(!padding_needed.IsCapability());
     adjusted_size = IntPtrAdd(size_in_bytes, padding_needed);
+    DCHECK(!adjusted_size.IsCapability());
 #else   // !(__CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS)
     adjusted_size = IntPtrAdd(size_in_bytes, IntPtrConstant(4));
 #endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
@@ -1445,8 +1465,17 @@ TNode<HeapObject> CodeStubAssembler::AllocateRaw(TNode<IntPtrT> size_in_bytes,
   }
 
   adjusted_size = AlignToAllocationAlignment(adjusted_size.value());
-  TNode<IntPtrT> new_top =
-      IntPtrAdd(UncheckedCast<IntPtrT>(top), adjusted_size.value());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!adjusted_size.IsCapability());
+  TNode<IntPtrT> new_top = IntPtrRoundUpToByteBoundary(
+      IntPtrAdd(UncheckedCast<IntPtrT>(top).MarkAsCapability(),
+                adjusted_size.value()),
+      kSystemPointerSize);
+  DCHECK(new_top.IsCapability());
+#else   // !__CHERI_PURE_CAPABILITY__
+  TNode<IntPtrT> new_top = IntPtrAdd(
+      UncheckedCast<IntPtrT>(top).MarkAsCapability(), adjusted_size.value());
+#endif  // __CHERI_PURE_CAPABILITY__
 
   Branch(UintPtrGreaterThanOrEqual(new_top, limit), &runtime_call,
          &no_runtime_call);
@@ -1474,7 +1503,7 @@ TNode<HeapObject> CodeStubAssembler::AllocateRaw(TNode<IntPtrT> size_in_bytes,
     StoreNoWriteBarrier(MachineType::PointerRepresentation(), top_address,
                         new_top);
 
-    TVARIABLE(IntPtrT, address, UncheckedCast<IntPtrT>(top));
+    TVARIABLE(IntPtrT, address, UncheckedCast<IntPtrT>(top).MarkAsCapability());
 
 #if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
     // Do this unconditionally on CHERI because we always need to check
@@ -1495,10 +1524,14 @@ TNode<HeapObject> CodeStubAssembler::AllocateRaw(TNode<IntPtrT> size_in_bytes,
       // round up to ensure we have enough space, but then we can fit more than
       // just one map.
       TNode<IntPtrT> rounded_top = IntPtrRoundUpToByteBoundary(
-          UncheckedCast<IntPtrT>(top), kSystemPointerSize);
+          UncheckedCast<IntPtrT>(top).MarkAsCapability(), kSystemPointerSize);
+      DCHECK(rounded_top.IsCapability());
       TNode<IntPtrT> padding_needed =
-          IntPtrSub(rounded_top, UncheckedCast<IntPtrT>(top));
-      address = IntPtrAdd(UncheckedCast<IntPtrT>(top), padding_needed);
+          IntPtrSub(rounded_top, UncheckedCast<IntPtrT>(top)).MarkAsInteger();
+      DCHECK(!padding_needed.IsCapability());
+      address = IntPtrAdd(UncheckedCast<IntPtrT>(top).MarkAsCapability(),
+                          padding_needed);
+      DCHECK(address.IsCapability());
 #else   // !(__CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS)
       // Store a filler and increase the address by 4.
       StoreNoWriteBarrier(MachineRepresentation::kTagged, top,
@@ -1512,6 +1545,9 @@ TNode<HeapObject> CodeStubAssembler::AllocateRaw(TNode<IntPtrT> size_in_bytes,
 
     result = BitcastWordToTagged(
         IntPtrAdd(address.value(), IntPtrConstant(kHeapObjectTag)));
+#ifdef __CHERI_PURE_CAPABILITY__
+    DCHECK(result.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__
     Goto(&out);
   }
 
@@ -1523,7 +1559,7 @@ TNode<HeapObject> CodeStubAssembler::AllocateRaw(TNode<IntPtrT> size_in_bytes,
   }
 
   BIND(&out);
-  return UncheckedCast<HeapObject>(MarkNodeAsCapability(result.value()));
+  return UncheckedCast<HeapObject>(result.value());
 }
 
 TNode<HeapObject> CodeStubAssembler::AllocateRawUnaligned(
@@ -2511,10 +2547,6 @@ TNode<TValue> CodeStubAssembler::LoadArrayElement(TNode<Array> array,
   CSA_DCHECK(this, IsOffsetInBounds(offset, LoadArrayLength(array),
                                     array_header_size));
   constexpr MachineType machine_type = MachineTypeOf<TValue>::value;
-  if constexpr (is_capability<TValue>::value) {
-    return MarkNodeAsCapability(
-        UncheckedCast<TValue>(LoadFromObject(machine_type, array, offset)));
-  }
   return UncheckedCast<TValue>(LoadFromObject(machine_type, array, offset));
 }
 
@@ -2587,6 +2619,9 @@ void CodeStubAssembler::FixedArrayBoundsCheck(TNode<FixedArrayBase> array,
 TNode<Object> CodeStubAssembler::LoadPropertyArrayElement(
     TNode<PropertyArray> object, TNode<IntPtrT> index) {
   int additional_offset = 0;
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+  DCHECK(object.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
   return CAST(LoadArrayElement(object, PropertyArray::kHeaderSize, index,
                                additional_offset));
 }
@@ -3310,6 +3345,9 @@ void CodeStubAssembler::StoreObjectField(TNode<HeapObject> object,
   if (TryToInt32Constant(offset, &const_offset)) {
     StoreObjectField(object, const_offset, value);
   } else {
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(value.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     Store(object, IntPtrSub(offset, IntPtrConstant(kHeapObjectTag)), value);
   }
 }
@@ -3334,6 +3372,9 @@ void CodeStubAssembler::StoreSharedObjectField(TNode<HeapObject> object,
   if (TryToInt32Constant(offset, &const_offset)) {
     StoreObjectField(object, const_offset, value);
   } else {
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(value.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     Store(object, IntPtrSub(offset, IntPtrConstant(kHeapObjectTag)), value);
   }
 }
@@ -3417,6 +3458,9 @@ void CodeStubAssembler::StoreFixedArrayOrPropertyArrayElement(
   } else if (barrier_mode == UPDATE_EPHEMERON_KEY_WRITE_BARRIER) {
     StoreEphemeronKey(object, offset, value);
   } else {
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(value.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     Store(object, offset, value);
   }
 }
@@ -3484,6 +3528,9 @@ void CodeStubAssembler::StoreFeedbackVectorSlot(
     UnsafeStoreNoWriteBarrier(MachineRepresentation::kTagged, feedback_vector,
                               offset, value);
   } else {
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(value.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     Store(feedback_vector, offset, value);
   }
 }
@@ -3820,6 +3867,9 @@ TNode<ByteArray> CodeStubAssembler::AllocateByteArray(TNode<UintPtrT> length,
   }
 
   BIND(&if_join);
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+  DCHECK(var_result.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
   return CAST(var_result.value());
 }
 
@@ -5576,6 +5626,9 @@ void CodeStubAssembler::CopyPropertyArrayValues(TNode<HeapObject> from_array,
         }
 
         if (needs_write_barrier) {
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+          DCHECK(value.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
           Store(to_array, offset, value);
         } else {
           StoreNoWriteBarrier(MachineRepresentation::kTagged, to_array, offset,
@@ -7241,11 +7294,19 @@ void CodeStubAssembler::GotoIfLargeBigInt(TNode<BigInt> bigint,
       DecodeWord32<BigIntBase::LengthBits>(LoadBigIntBitfield(bigint));
   GotoIf(Word32Equal(length, Uint32Constant(0)), &false_label);
   GotoIfNot(Word32Equal(length, Uint32Constant(1)), true_label);
+#ifdef __CHERI_PURE_CAPABILITY__
+  Branch(WordEqual(UintPtrConstant(0),
+                   WordAnd(LoadBigIntDigit(bigint, 0),
+                           UintPtrConstant(static_cast<uintptr_t>(
+                               1ULL << (sizeof(uint64_t) * 8 - 1))))),
+         &false_label, true_label);
+#else
   Branch(WordEqual(UintPtrConstant(0),
                    WordAnd(LoadBigIntDigit(bigint, 0),
                            UintPtrConstant(static_cast<uintptr_t>(
                                1ULL << (sizeof(uintptr_t) * 8 - 1))))),
          &false_label, true_label);
+#endif
   Bind(&false_label);
 }
 
@@ -8410,10 +8471,19 @@ TNode<Uint32T> CodeStubAssembler::DecodeWord32(TNode<Word32T> word32,
 }
 
 TNode<UintPtrT> CodeStubAssembler::DecodeWord(TNode<WordT> word, uint32_t shift,
+#ifdef __CHERI_PURE_CAPABILITY__
+                                              uint64_t mask) {
+#else  // !__CHERI_PURE_CAPABILITY__
                                               uintptr_t mask) {
+#endif // __CHERI_PURE_CAPABILITY__
   DCHECK_EQ((mask >> shift) << shift, mask);
+#ifdef __CHERI_PURE_CAPABILITY__
+  if ((std::numeric_limits<uint64_t>::max() >> shift) ==
+      ((std::numeric_limits<uint64_t>::max() & mask) >> shift)) {
+#else   // !__CHERI_PURE_CAPABILITY__
   if ((std::numeric_limits<uintptr_t>::max() >> shift) ==
       ((std::numeric_limits<uintptr_t>::max() & mask) >> shift)) {
+#endif  // __CHERI_PURE_CAPABILITY__
     return Unsigned(WordShr(word, static_cast<int>(shift)));
   } else {
     return Unsigned(WordAnd(WordShr(word, static_cast<int>(shift)),
@@ -8441,7 +8511,11 @@ TNode<Word32T> CodeStubAssembler::UpdateWord32(TNode<Word32T> word,
 
 TNode<WordT> CodeStubAssembler::UpdateWord(TNode<WordT> word,
                                            TNode<UintPtrT> value,
+#ifdef __CHERI_PURE_CAPABILITY__
+                                           uint32_t shift, uint64_t mask,
+#else   // !__CHERI_PURE_CAPABILITY__
                                            uint32_t shift, uintptr_t mask,
+#endif  // __CHERI_PURE_CAPABILITY__
                                            bool starts_as_zero) {
   DCHECK_EQ((mask >> shift) << shift, mask);
   // Ensure the {value} fits fully in the mask.
@@ -8496,18 +8570,9 @@ void CodeStubAssembler::DecrementCounter(StatsCounter* counter, int delta) {
 }
 
 template <typename TIndex>
-void CodeStubAssembler::Increment(TVariable<TIndex>* variable, int value) {
-#ifdef __CHERI_PURE_CAPABILITY__
-  if constexpr (std::is_base_of<IntPtrT, TIndex>::value ||
-                std::is_base_of<UintPtrT, TIndex>::value) {
-    if (NodeIsCapability(variable->value())) {
-      *variable =
-          IntPtrOrSmiAdd(variable->value(), IntPtrOrSmiConstant<TIndex>(value));
-      MarkNodeAsCapability(variable->value());
-      return;
-    }
-  }
-#endif  // __CHERI_PURE_CAPABILITY__
+void CodeStubAssembler::Increment(TVariable<TIndex>* variable, int value,
+                                  bool is_cap) {
+  if (is_cap) variable->MarkAsCapability();
   *variable =
       IntPtrOrSmiAdd(variable->value(), IntPtrOrSmiConstant<TIndex>(value));
 }
@@ -8515,11 +8580,11 @@ void CodeStubAssembler::Increment(TVariable<TIndex>* variable, int value) {
 // Instantiate Increment for Smi and IntPtrT.
 // TODO(v8:9708): Consider renaming to [Smi|IntPtrT|RawPtrT]Increment.
 template void CodeStubAssembler::Increment<Smi>(TVariable<Smi>* variable,
-                                                int value);
+                                                int value, bool is_cap);
 template void CodeStubAssembler::Increment<IntPtrT>(
-    TVariable<IntPtrT>* variable, int value);
+    TVariable<IntPtrT>* variable, int value, bool is_cap);
 template void CodeStubAssembler::Increment<RawPtrT>(
-    TVariable<RawPtrT>* variable, int value);
+    TVariable<RawPtrT>* variable, int value, bool is_cap);
 
 void CodeStubAssembler::Use(Label* label) {
   GotoIf(Word32Equal(Int32Constant(0), Int32Constant(1)), label);
@@ -10173,6 +10238,12 @@ void CodeStubAssembler::LoadPropertyFromFastObject(
     TNode<Uint32T> details, TVariable<Object>* var_value) {
   Comment("[ LoadPropertyFromFastObject");
 
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+  DCHECK(object.IsCapability());
+  DCHECK(map.IsCapability());
+  DCHECK(descriptors.IsCapability());
+  DCHECK(var_value->IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
   TNode<Uint32T> location =
       DecodeWord32<PropertyDetails::LocationField>(details);
 
@@ -10193,6 +10264,10 @@ void CodeStubAssembler::LoadPropertyFromFastObject(
     field_index =
         IntPtrAdd(field_index, LoadMapInobjectPropertiesStartInWords(map));
     TNode<IntPtrT> instance_size_in_words = LoadMapInstanceSizeInWords(map);
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(!field_index.IsCapability());
+    DCHECK(!instance_size_in_words.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
 
     Label if_inobject(this), if_backing_store(this);
     TVARIABLE(Float64T, var_double_value);
@@ -10226,6 +10301,10 @@ void CodeStubAssembler::LoadPropertyFromFastObject(
       Comment("if_backing_store");
       TNode<HeapObject> properties = LoadFastProperties(CAST(object));
       field_index = Signed(IntPtrSub(field_index, instance_size_in_words));
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+      DCHECK(properties.IsCapability());
+      DCHECK(!field_index.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
       TNode<Object> value =
           LoadPropertyArrayElement(CAST(properties), field_index);
 
@@ -10511,6 +10590,9 @@ void CodeStubAssembler::TryGetOwnProperty(
   BIND(&if_found_fast);
   {
     TNode<DescriptorArray> descriptors = CAST(var_meta_storage.value());
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(!var_entry.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     TNode<IntPtrT> name_index = var_entry.value();
 
     LoadPropertyFromFastObject(object, map, descriptors, name_index,
@@ -12467,11 +12549,19 @@ TNode<TIndex> CodeStubAssembler::BuildFastLoop(
 
   auto loop_body = [&]() {
     if (advance_mode == IndexAdvanceMode::kPre) {
+#ifdef V8_COMPRESS_POINTERS
       Increment(&var_index, increment);
+#else   // !V8_COMPRESS_POINTERS
+      Increment(&var_index, increment, true);
+#endif  // V8_COMPRESS_POINTERS
     }
     body(var_index.value());
     if (advance_mode == IndexAdvanceMode::kPost) {
+#ifdef V8_COMPRESS_POINTERS
       Increment(&var_index, increment);
+#else   // !V8_COMPRESS_POINTERS
+      Increment(&var_index, increment, true);
+#endif  // V8_COMPRESS_POINTERS
     }
   };
   // The loops below are generated using the following trick:
@@ -12856,6 +12946,10 @@ TNode<Oddball> CodeStubAssembler::RelationalComparison(
   // conversions.
   TVARIABLE(Object, var_left, left);
   TVARIABLE(Object, var_right, right);
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+  DCHECK(var_left.IsCapability());
+  DCHECK(var_right.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
   VariableList loop_variable_list({&var_left, &var_right}, zone());
   if (var_type_feedback != nullptr) {
     // Initialize the type feedback to None. The current feedback is combined
@@ -12869,6 +12963,10 @@ TNode<Oddball> CodeStubAssembler::RelationalComparison(
   {
     left = var_left.value();
     right = var_right.value();
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(left.IsCapability());
+    DCHECK(right.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
 
     Label if_left_smi(this), if_left_not_smi(this);
     Branch(TaggedIsSmi(left), &if_left_smi, &if_left_not_smi);
