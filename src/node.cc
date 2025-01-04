@@ -786,11 +786,13 @@ static ExitCode ProcessGlobalArgsInternal(std::vector<std::string>* args,
   }
   // TODO(aduh95): remove this when the harmony-import-attributes flag
   // is removed in V8.
+#ifndef __CHERI_PURE_CAPABILITY__
   if (std::find(v8_args.begin(),
                 v8_args.end(),
                 "--no-harmony-import-attributes") == v8_args.end()) {
     v8_args.emplace_back("--harmony-import-attributes");
   }
+#endif
 
   auto env_opts = per_process::cli_options->per_isolate->per_env;
   if (std::find(v8_args.begin(), v8_args.end(),

@@ -792,8 +792,13 @@ inline bool IsBigEndian() {
 }
 
 // Round up a to the next highest multiple of b.
+#if defined(__CHERI_PURE_CAPABILITY__)
+template <typename T, typename U>
+constexpr T RoundUp(T a, U b) {
+#else
 template <typename T>
 constexpr T RoundUp(T a, T b) {
+#endif
   return a % b != 0 ? a + b - (a % b) : a;
 }
 
