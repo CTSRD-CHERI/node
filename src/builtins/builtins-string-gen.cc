@@ -460,6 +460,9 @@ TNode<String> StringBuiltinsAssembler::AllocateConsString(TNode<Uint32T> length,
       [=] { return ConsOneByteStringMapConstant(); },
       [=] { return ConsStringMapConstant(); }));
   TNode<HeapObject> result = AllocateInNewSpace(ConsString::kSize);
+#ifndef V8_COMPRESS_POINTERS
+  DCHECK(result.IsCapability());
+#endif  // V8_COMPRESS_POINTERS
   StoreMapNoWriteBarrier(result, result_map);
   StoreObjectFieldNoWriteBarrier(result, ConsString::kLengthOffset, length);
   StoreObjectFieldNoWriteBarrier(result, ConsString::kRawHashFieldOffset,
@@ -510,6 +513,9 @@ TNode<String> StringBuiltinsAssembler::StringAdd(
 
     result =
         AllocateConsString(new_length, var_left.value(), var_right.value());
+#ifndef V8_COMPRESS_POINTERS
+    DCHECK(result.IsCapability());
+#endif  // V8_COMPRESS_POINTERS
     Goto(&done);
 
     BIND(&non_cons);
@@ -538,6 +544,9 @@ TNode<String> StringBuiltinsAssembler::StringAdd(
            &two_byte);
     // One-byte sequential string case
     result = AllocateSeqOneByteString(new_length);
+#ifndef V8_COMPRESS_POINTERS
+    DCHECK(result.IsCapability());
+#endif  // V8_COMPRESS_POINTERS
     CopyStringCharacters(var_left.value(), result.value(), IntPtrConstant(0),
                          IntPtrConstant(0), word_left_length,
                          String::ONE_BYTE_ENCODING, String::ONE_BYTE_ENCODING);
@@ -550,6 +559,9 @@ TNode<String> StringBuiltinsAssembler::StringAdd(
     {
       // Two-byte sequential string case
       result = AllocateSeqTwoByteString(new_length);
+#ifndef V8_COMPRESS_POINTERS
+      DCHECK(result.IsCapability());
+#endif  // V8_COMPRESS_POINTERS
       CopyStringCharacters(var_left.value(), result.value(), IntPtrConstant(0),
                            IntPtrConstant(0), word_left_length,
                            String::TWO_BYTE_ENCODING,
@@ -572,6 +584,9 @@ TNode<String> StringBuiltinsAssembler::StringAdd(
   BIND(&runtime);
   {
     result = CAST(CallRuntime(Runtime::kStringAdd, context, left, right));
+#ifndef V8_COMPRESS_POINTERS
+    DCHECK(result.IsCapability());
+#endif  // V8_COMPRESS_POINTERS
     Goto(&done);
   }
 
@@ -588,8 +603,14 @@ void StringBuiltinsAssembler::BranchIfCanDerefIndirectString(
   GotoIf(Word32NotEqual(representation, Int32Constant(kConsStringTag)),
          cannot_deref);
   // Cons string.
+#ifndef V8_COMPRESS_POINTERS
+  DCHECK(string.IsCapability());
+#endif  // V8_COMPRESS_POINTERS
   TNode<String> rhs =
       LoadObjectField<String>(string, ConsString::kSecondOffset);
+#ifndef V8_COMPRESS_POINTERS
+  DCHECK(rhs.IsCapability());
+#endif  // V8_COMPRESS_POINTERS
   GotoIf(IsEmptyString(rhs), can_deref);
   Goto(cannot_deref);
 }
@@ -1773,10 +1794,18 @@ void StringBuiltinsAssembler::CopyStringCharacters(
   ElementsKind to_kind = to_one_byte ? UINT8_ELEMENTS : UINT16_ELEMENTS;
   static_assert(SeqOneByteString::kHeaderSize == SeqTwoByteString::kHeaderSize);
   int header_size = SeqOneByteString::kHeaderSize - kHeapObjectTag;
+#ifndef V8_COMPRESS_POINTERS
+  TNode<IntPtrT> from_offset =
+      ElementOffsetFromIndex(from_index, from_kind, header_size)
+          .MarkAsCapability();
+  TNode<IntPtrT> to_offset =
+      ElementOffsetFromIndex(to_index, to_kind, header_size).MarkAsCapability();
+#else   // V8_COMPRESS_POINTERS
   TNode<IntPtrT> from_offset =
       ElementOffsetFromIndex(from_index, from_kind, header_size);
   TNode<IntPtrT> to_offset =
       ElementOffsetFromIndex(to_index, to_kind, header_size);
+#endif  // !V8_COMPRESS_POINTERS
   TNode<IntPtrT> byte_count =
       ElementOffsetFromIndex(character_count, from_kind);
   TNode<IntPtrT> limit_offset = IntPtrAdd(from_offset, byte_count);

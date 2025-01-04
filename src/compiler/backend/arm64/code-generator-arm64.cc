@@ -239,7 +239,9 @@ class Arm64OperandConverter final : public InstructionOperandConverter {
   }
 #endif // defined(__CHERI_PURE_CAPABILITY__)
 
-  MemOperand MemoryOperand(size_t index = 0, bool cap_register = false) {
+  // FIXME(cheri): This breaks the build on non-CHERI. Create a shim for
+  // capability helpers.
+  MemOperand MemoryOperand(size_t index = 0) {
     switch (AddressingModeField::decode(instr_->opcode())) {
       case kMode_None:
       case kMode_Operand2_R_LSR_I:
@@ -254,18 +256,11 @@ class Arm64OperandConverter final : public InstructionOperandConverter {
       case kMode_Root:
         return MemOperand(kRootRegister, InputInt64(index));
       case kMode_Operand2_R_LSL_I:
-        DCHECK(!cap_register);
         return MemOperand(InputRegister(index + 0), InputRegister(index + 1),
                           LSL, InputInt32(index + 2));
       case kMode_MRI:
-        if (cap_register)
-          return MemOperand(InputCapabilityRegister(index + 0),
-                            InputInt32(index + 1));
         return MemOperand(InputRegister(index + 0), InputInt32(index + 1));
       case kMode_MRR:
-        if (cap_register)
-          return MemOperand(InputCapabilityRegister(index + 0),
-                            InputRegister(index + 1));
         return MemOperand(InputRegister(index + 0), InputRegister(index + 1));
     }
     UNREACHABLE();
@@ -1433,6 +1428,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         __ Adds(i.OutputRegisterCapability(),
                 i.InputOrZeroRegisterCapability(0),
                 i.InputOperand2_Capability(1));
+	break;
       }
       __ Add(i.OutputRegisterCapability(),
              i.InputOrZeroRegisterCapability(0),
@@ -1485,26 +1481,25 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
                FlagsConditionField::decode(opcode) == kNotEqual ||
                FlagsConditionField::decode(opcode) == kPositiveOrZero ||
                FlagsConditionField::decode(opcode) == kNegative);
-#if defined(__CHERI_PURE_CAPABILITY__)
-	if ((instr->OutputAt(0)->IsCapabilityRegister()) ||
+#ifdef __CHERI_PURE_CAPABILITY__
+        if ((instr->OutputAt(0)->IsCapabilityRegister()) ||
             (instr->InputAt(0)->IsCapabilityRegister())) {
-          __ Ands(i.OutputRegisterCapability(), i.InputOrZeroRegisterCapability(0),
-                  i.InputOperand2_64(1));
-	  return kSuccess;
+          __ Ands(i.OutputRegisterCapability(),
+                  i.InputOrZeroRegisterCapability(0), i.InputOperand2_64(1));
+          return kSuccess;
         }
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // __CHERI_PURE_CAPABILITY__
         __ Ands(i.OutputRegister(), i.InputOrZeroRegister64(0),
                 i.InputOperand2_64(1));
       } else {
-#if defined(__CHERI_PURE_CAPABILITY__)
-	if ((instr->OutputAt(0)->IsCapabilityRegister()) ||
+#ifdef __CHERI_PURE_CAPABILITY__
+        if ((instr->OutputAt(0)->IsCapabilityRegister()) ||
             (instr->InputAt(0)->IsCapabilityRegister())) {
           __ And(i.OutputRegisterCapability(),
-                 i.InputOrZeroRegisterCapability(0),
-                 i.InputOperand2_64(1));
-	  return kSuccess;
+                 i.InputOrZeroRegisterCapability(0), i.InputOperand2_64(1));
+          return kSuccess;
         }
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // __CHERI_PURE_CAPABILITY__
         __ And(i.OutputRegister(), i.InputOrZeroRegister64(0),
                i.InputOperand2_64(1));
       }
@@ -1743,9 +1738,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
 #if defined(__CHERI_PURE_CAPABILITY__)
       if ((instr->OutputAt(0)->IsCapabilityRegister()) ||
           (instr->InputAt(0)->IsCapabilityRegister())) {
-      __ Orr(i.OutputRegisterCapability(),
-	     i.InputOrZeroRegisterCapability(0),
-             i.InputOperand2_64(1));
+        __ Orr(i.OutputRegisterCapability(), i.InputOrZeroRegisterCapability(0),
+               i.InputOperand2_64(1));
+        break;
       }
 #endif // defined(__CHERI_PURE_CAPABILITY__)
       __ Orr(i.OutputRegister(), i.InputOrZeroRegister64(0),
@@ -1786,21 +1781,21 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         __ Subs(i.OutputRegisterCapability(),
                 i.InputOrZeroRegisterCapability(0),
                 i.InputOperand2_Capability(1));
+      } else {
+        __ Sub(i.OutputRegisterCapability(), i.InputOrZeroRegisterCapability(0),
+               i.InputOperand2_Capability(1));
       }
-      __ Sub(i.OutputRegisterCapability(),
-             i.InputOrZeroRegisterCapability(0),
-             i.InputOperand2_Capability(1));
       break;
 #endif // defined(__CHERI_PURE_CAPABILITY__)
     case kArm64Sub:
       if (FlagsModeField::decode(opcode) != kFlags_none) {
  #if defined(__CHERI_PURE_CAPABILITY__)
-	if ((instr->OutputAt(0)->IsCapabilityRegister()) ||
+        if ((instr->OutputAt(0)->IsCapabilityRegister()) ||
             (instr->InputAt(0)->IsCapabilityRegister())) {
           __ Subs(i.OutputRegisterCapability(),
-		  i.InputOrZeroRegisterCapability(0),
+                  i.InputOrZeroRegisterCapability(0),
                   i.InputOperand2_Capability(1));
-	  return kSuccess;
+          return kSuccess;
         }
 #endif // defined(__CHERI_PURE_CAPABILITY__)
         __ Subs(i.OutputRegister(), i.InputOrZeroRegister64(0),
@@ -2388,15 +2383,14 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       // TODO(gcjenkinson): Why is the representation kWord64?
       // DCHECK_WITH_MSG(instr->InputAt(0)->IsCapabilityRegister(),
 //		       MachineReprToString(LocationOperand::cast(instr->InputAt(0))->representation()));
-      __ Str(i.InputOrZeroRegisterCapability(0), i.MemoryOperand(1, true));
+      __ Str(i.InputOrZeroRegisterCapability(0), i.MemoryOperand(1));
       break;
     case kArm64StrPairCapability:
       EmitOOLTrapIfNeeded(zone(), this, opcode, instr, __ pc_offset());
       __ Stp(i.InputOrZeroRegisterCapability(0),
-             i.InputOrZeroRegisterCapability(1), i.MemoryOperand(2, true));
+             i.InputOrZeroRegisterCapability(1), i.MemoryOperand(2));
       break;
 #endif // defined(__CHERI_PURE_CAPABILITY__)
-       //
     case kArm64StrCompressTagged:
       EmitOOLTrapIfNeeded(zone(), this, opcode, instr, __ pc_offset());
       __ StoreTaggedField(i.InputOrZeroRegister64(0), i.MemoryOperand(1));
@@ -3770,7 +3764,9 @@ void CodeGenerator::AssembleConstructFrame() {
       __ CodeEntry();
       size_t unoptimized_frame_slots = osr_helper()->UnoptimizedFrameSlots();
       DCHECK(call_descriptor->IsJSFunctionCall());
+#ifndef __CHERI_PURE_CAPABILITY__
       DCHECK_EQ(unoptimized_frame_slots % 2, 1);
+#endif  // !__CHERI_PURE_CAPABILITY__
       // One unoptimized frame slot has already been claimed when the actual
       // arguments count was pushed.
       required_slots -=
@@ -4066,9 +4062,9 @@ AllocatedOperand CodeGenerator::Push(InstructionOperand* source) {
   if (source->IsRegister()) {
 #if defined(__CHERI_PURE_CAPABILITY__)
     __ Push(g.ToRegister(source).C(), padregc);
-#else // defined(__CHERI_PURE_CAPABILITY__)
+#else   // defined(__CHERI_PURE_CAPABILITY__)
     __ Push(g.ToRegister(source), padreg);
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
     frame_access_state()->IncreaseSPDelta(new_slots);
 #if defined(__CHERI_PURE_CAPABILITY__)
   } else if (source->IsCapabilityStackSlot()) {
@@ -4077,7 +4073,7 @@ AllocatedOperand CodeGenerator::Push(InstructionOperand* source) {
     __ Ldr(scratch, g.ToMemOperand(source, masm()));
     __ Push(scratch, padregc);
     frame_access_state()->IncreaseSPDelta(new_slots);
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
   } else if (source->IsStackSlot()) {
     UseScratchRegisterScope temps(masm());
     Register scratch = temps.AcquireX();
@@ -4087,11 +4083,11 @@ AllocatedOperand CodeGenerator::Push(InstructionOperand* source) {
   } else {
     // No push instruction for this operand type. Bump the stack pointer and
     // assemble the move.
- #if defined(__CHERI_PURE_CAPABILITY__)
+#if defined(__CHERI_PURE_CAPABILITY__)
     __ Sub(csp, csp, Operand(new_slots * kSystemPointerSize));
-#else // defined(__CHERI_PURE_CAPABILITY__)
+#else   // defined(__CHERI_PURE_CAPABILITY__)
     __ Sub(sp, sp, Operand(new_slots * kSystemPointerSize));
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
     frame_access_state()->IncreaseSPDelta(new_slots);
     AssembleMove(source, &stack_slot);
   }
@@ -4160,14 +4156,13 @@ void CodeGenerator::MoveToTempLocation(InstructionOperand* source,
   // might be needed for the move to the temp location.
 #if defined(__CHERI_PURE_CAPABILITY__)
   if (IsCapability(rep)) {
-    temps.Exclude(CPURegList(ElementSizeInBits(rep),
-                  move_cycle_.scratch_regs));
+    temps.Exclude(CPURegList(ElementSizeInBits(rep), move_cycle_.scratch_regs));
   } else {
     temps.Exclude(CPURegList(64, move_cycle_.scratch_regs));
   }
-#else // defined(__CHERI_PURE_CAPABILITY__)
+#else   // defined(__CHERI_PURE_CAPABILITY__)
   temps.Exclude(CPURegList(64, move_cycle_.scratch_regs));
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
   temps.ExcludeFP(CPURegList(64, move_cycle_.scratch_fp_regs));
   if (!IsFloatingPoint(rep)) {
     if (temps.CanAcquire()) {
@@ -4180,11 +4175,11 @@ void CodeGenerator::MoveToTempLocation(InstructionOperand* source,
         move_cycle_.scratch_reg.emplace(scratch);
       }
     } else if (temps.CanAcquireFP() && !IsCapability(rep)) {
-#else // defined(__CHERI_PURE_CAPABILITY__)
+#else   // defined(__CHERI_PURE_CAPABILITY__)
       Register scratch = move_cycle_.temps->AcquireX();
       move_cycle_.scratch_reg.emplace(scratch);
     } else if (temps.CanAcquireFP()) {
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
       // Try to use an FP register if no GP register is available for non-FP
       // moves.
       DoubleRegister scratch = move_cycle_.temps->AcquireD();
@@ -4202,14 +4197,13 @@ void CodeGenerator::MoveToTempLocation(InstructionOperand* source,
   }
 #if defined(__CHERI_PURE_CAPABILITY__)
   if (IsCapability(rep)) {
-    temps.Exclude(CPURegList(ElementSizeInBits(rep),
-                  move_cycle_.scratch_regs));
+    temps.Exclude(CPURegList(ElementSizeInBits(rep), move_cycle_.scratch_regs));
   } else {
     temps.Exclude(CPURegList(64, move_cycle_.scratch_regs));
   }
-#else // defined(__CHERI_PURE_CAPABILITY__)
+#else   // defined(__CHERI_PURE_CAPABILITY__)
   temps.Include(CPURegList(64, move_cycle_.scratch_regs));
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
   temps.IncludeFP(CPURegList(64, move_cycle_.scratch_fp_regs));
   if (move_cycle_.scratch_reg.has_value()) {
     // A scratch register is available for this rep.
@@ -4281,23 +4275,23 @@ void CodeGenerator::SetPendingMove(MoveOperands* move) {
     } else if (move->source().IsCapabilityStackSlot()) {
       Register temp = temps.AcquireC();
       move_cycle_.scratch_regs.set(temp);
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
     } else {
       Register temp = temps.AcquireX();
       move_cycle_.scratch_regs.set(temp);
     }
     int64_t src_offset = src.offset();
 #if defined(__CHERI_PURE_CAPABILITY__)
-    unsigned src_size = CalcLSDataSize(LDR_c);
-#else // defined(__CHERI_PURE_CAPABILITY__)
+    unsigned src_size = CalcLSDataSize(LDR_c, true);
+#else   // defined(__CHERI_PURE_CAPABILITY__)
     unsigned src_size = CalcLSDataSize(LDR_x);
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
     int64_t dst_offset = dst.offset();
 #if defined(__CHERI_PURE_CAPABILITY__)
-    unsigned dst_size = CalcLSDataSize(STR_c);
-#else // defined(__CHERI_PURE_CAPABILITY__)
+    unsigned dst_size = CalcLSDataSize(STR_c, true);
+#else   // defined(__CHERI_PURE_CAPABILITY__)
     unsigned dst_size = CalcLSDataSize(STR_x);
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
     // Offset doesn't fit into the immediate field so the assembler will emit
     // two instructions and use a second temp register.
     if ((src.IsImmediateOffset() &&
@@ -4308,9 +4302,9 @@ void CodeGenerator::SetPendingMove(MoveOperands* move) {
          !masm()->IsImmLSUnscaled(dst_offset))) {
 #if defined(__CHERI_PURE_CAPABILITY__)
       Register temp = temps.AcquireC();
-#else // defined(__CHERI_PURE_CAPABILITY__)
+#else   // defined(__CHERI_PURE_CAPABILITY__)
       Register temp = temps.AcquireX();
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
       move_cycle_.scratch_regs.set(temp);
     }
   }
@@ -4368,8 +4362,8 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
       MemOperand dst = g.ToMemOperand(destination, masm());
       if (source->IsRegister()) {
 #if defined(__CHERI_PURE_CAPABILITY__)
-        // As the stack slots are capability width, perform
-        // a capability width store.
+        // As the stack slots are capability width, perform a capability width
+        // store.
         __ Str(g.ToRegister(source).C(), dst);
 #endif  // defined(__CHERI_PURE_CAPABILITY__)
       } else {
@@ -4386,11 +4380,13 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
     case MoveType::kStackToRegister: {
       MemOperand src = g.ToMemOperand(source, masm());
       if (destination->IsRegister()) {
-#if defined(__CHERI_PURE_CAPABILITY__)
+#ifdef __CHERI_PURE_CAPABILITY__
         // As the stack slots are capability width, perform
         // a capability width load.
         __ Ldr(g.ToRegister(destination).C(), src);
-#endif  // defined(__CHERI_PURE_CAPABILITY__)
+#else   // !__CHERI_PURE_CAPABILITY__
+        __ Ldr(g.ToRegister(destination), src);
+#endif  // __CHERI_PURE_CAPABILITY__
       } else {
         VRegister dst = g.ToDoubleRegister(destination);
         if (destination->IsFloatRegister() || destination->IsDoubleRegister()) {
@@ -4458,7 +4454,7 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
           __ Str(temp, dst);
           return;
         }
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
         Register temp = scope.AcquireX();
         MoveConstantToRegister(temp, src);
         __ Str(temp, dst);
@@ -4498,9 +4494,9 @@ void CodeGenerator::AssembleSwap(InstructionOperand* source,
         if ((source->IsCapabilityRegister()) ||
             (destination->IsCapabilityRegister())) {
           __ Swap(g.ToRegister(source).C(), g.ToRegister(destination).C());
-	  return;
-	}
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+          return;
+        }
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
         __ Swap(g.ToRegister(source), g.ToRegister(destination));
       } else {
         VRegister src = g.ToDoubleRegister(source);
@@ -4524,9 +4520,9 @@ void CodeGenerator::AssembleSwap(InstructionOperand* source,
           __ Mov(temp, src);
           __ Ldr(src, dst);
           __ Str(temp, dst);
-	  return;
-	}
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+          return;
+        }
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
         Register temp = scope.AcquireX();
         Register src = g.ToRegister(source);
         __ Mov(temp, src);
@@ -4561,7 +4557,7 @@ void CodeGenerator::AssembleSwap(InstructionOperand* source,
         __ Ldr(temp_1.Q(), dst);
         __ Str(temp_0.Q(), dst);
         __ Str(temp_1.Q(), src);
- #if defined(__CHERI_PURE_CAPABILITY__)
+#if defined(__CHERI_PURE_CAPABILITY__)
       } else if (source->IsCapabilityStackSlot()) {
         Register temp_0 = scope.AcquireC();
         Register temp_1 = scope.AcquireC();
@@ -4569,7 +4565,7 @@ void CodeGenerator::AssembleSwap(InstructionOperand* source,
         __ Ldr(temp_1, dst);
         __ Str(temp_0, dst);
         __ Str(temp_1, src);
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
       } else {
         __ Ldr(temp_0, src);
         __ Ldr(temp_1, dst);

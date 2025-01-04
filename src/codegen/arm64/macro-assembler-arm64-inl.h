@@ -1416,12 +1416,7 @@ void MacroAssembler::InitializeRootRegister() {
 }
 
 void MacroAssembler::SmiTag(Register dst, Register src) {
-#if defined(__CHERI_PURE_CAPABILITY__)
-  DCHECK((dst.Is64Bits() && src.Is64Bits()) ||
-	 (dst.Is128Bits() && src.Is128Bits()));
-#else   // !__CHERI_PURE_CAPABILITY__
   DCHECK(dst.Is64Bits() && src.Is64Bits());
-#endif  // !__CHERI_PURE_CAPABILITY__
   DCHECK(SmiValuesAre32Bits() || SmiValuesAre31Bits());
   Lsl(dst, src, kSmiShift);
 }
@@ -1429,12 +1424,7 @@ void MacroAssembler::SmiTag(Register dst, Register src) {
 void MacroAssembler::SmiTag(Register smi) { SmiTag(smi, smi); }
 
 void MacroAssembler::SmiUntag(Register dst, Register src) {
-#if defined(__CHERI_PURE_CAPABILITY__)
-  DCHECK((dst.Is64Bits() && src.Is64Bits()) ||
-	 (dst.Is128Bits() && src.Is128Bits()));
-#else   // !__CHERI_PURE_CAPABILITY__
   DCHECK(dst.Is64Bits() && src.Is64Bits());
-#endif  // !__CHERI_PURE_CAPABILITY__
   if (v8_flags.enable_slow_asserts) {
     AssertSmi(src);
   }
@@ -1442,30 +1432,12 @@ void MacroAssembler::SmiUntag(Register dst, Register src) {
   if (COMPRESS_POINTERS_BOOL) {
     Sbfx(dst, src.W(), kSmiShift, kSmiValueSize);
   } else {
-#if defined(__CHERI_PURE_CAPABILITY__)
-    {
-      UseScratchRegisterScope temps(this);
-      Register temp = temps.AcquireX();
-      if (src.Is128Bits()) {
-        Gcvalue(src, temp);
-        Asr(temp, temp, kSmiShift);
-        Scvalue(dst, dst, temp);
-      } else {
-        Asr(dst, src, kSmiShift);
-      }
-    }
-#else
     Asr(dst, src, kSmiShift);
-#endif
   }
 }
 
 void MacroAssembler::SmiUntag(Register dst, const MemOperand& src) {
-#if defined(__CHERI_PURE_CAPABILITY__)
-  DCHECK(dst.Is64Bits() || dst.Is128Bits());
-#else   // !__CHERI_PURE_CAPABILITY__
   DCHECK(dst.Is64Bits());
-#endif  // !__CHERI_PURE_CAPABILITY__
   if (SmiValuesAre32Bits()) {
     if (src.IsImmediateOffset() && src.shift_amount() == 0) {
       // Load value directly from the upper half-word.
@@ -1545,6 +1517,16 @@ void MacroAssembler::jmp(Label* L) { B(L); }
 template <MacroAssembler::StoreLRMode lr_mode>
 void MacroAssembler::Push(const CPURegister& src0, const CPURegister& src1,
                           const CPURegister& src2, const CPURegister& src3) {
+#ifdef __CHERI_PURE_CAPABILITY__
+  // XXX(cheri): This is quite messy, but it seems to be the "cleanest" way to
+  // resolve calls from the baseline assembler that explicitly pass padreg with
+  // no information about the other registers being passed in.
+  if (src0.is_valid() && !src0.IsC() && src0.code() == padreg.code() &&
+      src1.IsC()) {
+    Push(padregc, src1, src2, src3);
+    return;
+  }
+#endif  // __CHERI_PURE_CAPABILITY__
   DCHECK(AreSameSizeAndType(src0, src1, src2, src3));
   DCHECK_IMPLIES((lr_mode == kSignLR), ((src0 == lr) || (src1 == lr) ||
                                         (src2 == lr) || (src3 == lr)));
@@ -1580,13 +1562,11 @@ void MacroAssembler::Push(const Register& src0, const VRegister& src1) {
   // Reserve room for src0 and push src1.
 #if defined(__CHERI_PURE_CAPABILITY__)
   str(src1, MemOperand(csp, -size, PreIndex));
-#else
-  str(src1, MemOperand(sp, -size, PreIndex));
-#endif // __CHERI_PURE_CAPABILITY__
   // Fill the gap with src0.
-#if defined(__CHERI_PURE_CAPABILITY__)
   str(src0, MemOperand(csp, src1.SizeInBytes()));
 #else
+  str(src1, MemOperand(sp, -size, PreIndex));
+  // Fill the gap with src0.
   str(src0, MemOperand(sp, src1.SizeInBytes()));
 #endif // __CHERI_PURE_CAPABILITY__
 }
@@ -1597,6 +1577,16 @@ void MacroAssembler::Pop(const CPURegister& dst0, const CPURegister& dst1,
   // It is not valid to pop into the same register more than once in one
   // instruction, not even into the zero register.
   DCHECK(!AreAliased(dst0, dst1, dst2, dst3));
+#ifdef __CHERI_PURE_CAPABILITY__
+  // XXX(cheri): This is quite messy, but it seems to be the "cleanest" way to
+  // resolve calls from the baseline assembler that explicitly pass padreg with
+  // no information about the other registers being passed in.
+  if (dst1.is_valid() && !dst1.IsC() && dst1.code() == padreg.code() &&
+      dst0.IsC()) {
+    Pop(dst0, padregc, dst2, dst3);
+    return;
+  }
+#endif  // __CHERI_PURE_CAPABILITY__
   DCHECK(AreSameSizeAndType(dst0, dst1, dst2, dst3));
   DCHECK(dst0.is_valid());
 

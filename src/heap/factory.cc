@@ -391,6 +391,9 @@ HeapObject Factory::New(Handle<Map> map, AllocationType allocation) {
   int size = map->instance_size();
   HeapObject result = allocator()->AllocateRawWith<HeapAllocator::kRetryOrFail>(
       size, allocation);
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+  DCHECK(IsAligned(result.address(), kSystemPointerSize));
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
   // New space objects are allocated white.
   WriteBarrierMode write_barrier_mode = allocation == AllocationType::kYoung
                                             ? SKIP_WRITE_BARRIER
@@ -2412,10 +2415,19 @@ Handle<FixedDoubleArray> Factory::CopyFixedDoubleArray(
   if (len == 0) return array;
   Handle<FixedDoubleArray> result =
       Handle<FixedDoubleArray>::cast(NewFixedDoubleArray(len));
-  Heap::CopyBlock(
-      result->address() + FixedDoubleArray::kLengthOffset,
-      array->address() + FixedDoubleArray::kLengthOffset,
-      FixedDoubleArray::SizeFor(len) - FixedDoubleArray::kLengthOffset);
+  size_t bytes_to_copy =
+      FixedDoubleArray::SizeFor(len) - FixedDoubleArray::kLengthOffset;
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK_GE(
+      V8_CHERI_LENGTH_GET(result->address()) - FixedDoubleArray::kLengthOffset,
+      bytes_to_copy);
+  DCHECK_GE(
+      V8_CHERI_LENGTH_GET(array->address()) - FixedDoubleArray::kLengthOffset,
+      bytes_to_copy);
+#endif  // __CHERI_PURE_CAPABILITY__
+  Heap::CopyBlock(result->address() + FixedDoubleArray::kLengthOffset,
+                  array->address() + FixedDoubleArray::kLengthOffset,
+                  bytes_to_copy);
   return result;
 }
 

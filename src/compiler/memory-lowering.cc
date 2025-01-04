@@ -136,13 +136,24 @@ Node* MemoryLowering::AlignToAllocationAlignment(Node* value) {
   if (!V8_COMPRESS_POINTERS_8GB_BOOL) return value;
 
   auto already_aligned = __ MakeLabel(MachineRepresentation::kWord64);
+#ifdef __CHERI_PURE_CAPABILITY__
+  Node* alignment_check = __ WordEqual(
+      __ WordAnd(value, __ UintPtrConstant(kSystemPointerSize - 1)),
+      __ UintPtrConstant(0));
+#else   // !__CHERI_PURE_CAPABILITY__
   Node* alignment_check = __ WordEqual(
       __ WordAnd(value, __ UintPtrConstant(kObjectAlignment8GbHeapMask)),
       __ UintPtrConstant(0));
+#endif  // __CHERI_PURE_CAPABILITY__
 
   __ GotoIf(alignment_check, &already_aligned, value);
   {
     Node* aligned_value;
+#ifdef __CHERI_PURE_CAPABILITY__
+    aligned_value = __ WordAnd(
+        __ CapAdd(value, __ IntPtrConstant(kSystemPointerSize - 1)),
+        __ UintPtrConstant(~(kSystemPointerSize - 1)));
+#else   // !__CHERI_PURE_CAPABILITY__
     if (kObjectAlignment8GbHeap == 2 * kTaggedSize) {
       aligned_value = __ IntPtrAdd(value, __ IntPtrConstant(kTaggedSize));
     } else {
@@ -150,6 +161,7 @@ Node* MemoryLowering::AlignToAllocationAlignment(Node* value) {
           __ IntPtrAdd(value, __ IntPtrConstant(kObjectAlignment8GbHeapMask)),
           __ UintPtrConstant(~kObjectAlignment8GbHeapMask));
     }
+#endif  // __CHERI_PURE_CAPABILITY__
     __ Goto(&already_aligned, aligned_value);
   }
 
@@ -291,14 +303,25 @@ Reduction MemoryLowering::ReduceAllocateRaw(
       // TODO(bmeurer): Defer writing back top as much as possible.
       DCHECK_IMPLIES(V8_COMPRESS_POINTERS_8GB_BOOL,
                      IsAligned(object_size, kObjectAlignment8GbHeap));
+#ifdef __CHERI_PURE_CAPABILITY__
+      DCHECK_IMPLIES(kTaggedSize == kSystemPointerSize,
+                     IsAligned(object_size, kSystemPointerSize));
+      Node* top = __ CapAdd(state->top(), __ IntPtrConstant(object_size));
+#else   // !__CHERI_PURE_CAPABILITY__
       Node* top = __ IntAdd(state->top(), __ IntPtrConstant(object_size));
+#endif  // __CHERI_PURE_CAPABILITY__
       __ Store(StoreRepresentation(MachineType::PointerRepresentation(),
                                    kNoWriteBarrier),
                top_address, __ IntPtrConstant(0), top);
 
       // Compute the effective inner allocated address.
+#ifdef __CHERI_PURE_CAPABILITY__
+      value = __ BitcastWordToTagged(
+          __ CapAdd(state->top(), __ IntPtrConstant(kHeapObjectTag)));
+#else   // !__CHERI_PURE_CAPABILITY__
       value = __ BitcastWordToTagged(
           __ IntAdd(state->top(), __ IntPtrConstant(kHeapObjectTag)));
+#endif  // __CHERI_PURE_CAPABILITY__
       effect = gasm()->effect();
       control = gasm()->control();
 
@@ -332,21 +355,36 @@ Reduction MemoryLowering::ReduceAllocateRaw(
         EnsureAllocateOperator();
         Node* vfalse = __ BitcastTaggedToWord(__ Call(
             allocate_operator_.get(), allocate_builtin, reservation_size));
+#ifdef __CHERI_PURE_CAPABILITY__
+        vfalse = __ CapSub(vfalse, __ IntPtrConstant(kHeapObjectTag));
+#else   // !__CHERI_PURE_CAPABILITY__
         vfalse = __ IntSub(vfalse, __ IntPtrConstant(kHeapObjectTag));
+#endif  // __CHERI_PURE_CAPABILITY__
         __ Goto(&done, vfalse);
       }
 
       __ Bind(&done);
 
       // Compute the new top and write it back.
+#ifdef __CHERI_PURE_CAPABILITY__
+      DCHECK_IMPLIES(kTaggedSize == kSystemPointerSize,
+                     IsAligned(object_size, kSystemPointerSize));
+      top = __ CapAdd(done.PhiAt(0), __ IntPtrConstant(object_size));
+#else   // !__CHERI_PURE_CAPABILITY__
       top = __ IntAdd(done.PhiAt(0), __ IntPtrConstant(object_size));
+#endif  // __CHERI_PURE_CAPABILITY__
       __ Store(StoreRepresentation(MachineType::PointerRepresentation(),
                                    kNoWriteBarrier),
                top_address, __ IntPtrConstant(0), top);
 
       // Compute the initial object address.
+#ifdef __CHERI_PURE_CAPABILITY__
+      value = __ BitcastWordToTagged(
+          __ CapAdd(done.PhiAt(0), __ IntPtrConstant(kHeapObjectTag)));
+#else   // !__CHERI_PURE_CAPABILITY__
       value = __ BitcastWordToTagged(
           __ IntAdd(done.PhiAt(0), __ IntPtrConstant(kHeapObjectTag)));
+#endif  // __CHERI_PURE_CAPABILITY__
       effect = gasm()->effect();
       control = gasm()->control();
 
@@ -367,7 +405,11 @@ Reduction MemoryLowering::ReduceAllocateRaw(
         __ Load(MachineType::Pointer(), limit_address, __ IntPtrConstant(0));
 
     // Compute the new top.
+#ifdef __CHERI_PURE_CAPABILITY__
+    Node* new_top = __ CapAdd(top, AlignToAllocationAlignment(size));
+#else   // !__CHERI_PURE_CAPABILITY__
     Node* new_top = __ IntAdd(top, AlignToAllocationAlignment(size));
+#endif  // __CHERI_PURE_CAPABILITY__
 
     // Check if we can do bump pointer allocation here.
     Node* check = __ UintLessThan(new_top, limit);
@@ -380,8 +422,13 @@ Reduction MemoryLowering::ReduceAllocateRaw(
     __ Store(StoreRepresentation(MachineType::PointerRepresentation(),
                                  kNoWriteBarrier),
              top_address, __ IntPtrConstant(0), new_top);
+#ifdef __CHERI_PURE_CAPABILITY__
+    __ Goto(&done, __ BitcastWordToTagged(
+                       __ CapAdd(top, __ IntPtrConstant(kHeapObjectTag))));
+#else   // !__CHERI_PURE_CAPABILITY__
     __ Goto(&done, __ BitcastWordToTagged(
                        __ IntAdd(top, __ IntPtrConstant(kHeapObjectTag))));
+#endif  // __CHERI_PURE_CAPABILITY__
 
     __ Bind(&call_runtime);
     EnsureAllocateOperator();

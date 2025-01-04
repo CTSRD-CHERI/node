@@ -1594,8 +1594,17 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
   }
 
   Label call_stack_guard;
+#ifdef __CHERI_PURE_CAPABILITY__
+  Register frame_size =
+      descriptor
+          .GetRegisterParameter(
+              BaselineOutOfLinePrologueDescriptor::kStackFrameSize)
+          .X();
+  DCHECK(!frame_size.IsC());
+#else   // !__CHERI_PURE_CAPABILITY__
   Register frame_size = descriptor.GetRegisterParameter(
       BaselineOutOfLinePrologueDescriptor::kStackFrameSize);
+#endif  // __CHERI_PURE_CAPABILITY__
   {
     ASM_CODE_COMMENT_STRING(masm, "Stack/interrupt check");
     // Stack check. This folds the checks for both the interrupt stack limit
@@ -1604,16 +1613,9 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
     // limit or tighter. By ensuring we have space until that limit after
     // building the frame we can quickly precheck both at once.
     UseScratchRegisterScope temps(masm);
-
-#if defined(__CHERI_PURE_CAPABILITY__)
-    Register sp_minus_frame_size = temps.AcquireC();
-    __ Sub(sp_minus_frame_size, csp, frame_size);
-    Register interrupt_limit = temps.AcquireC();
-#else // defined(__CHERI_PURE_CAPABILITY__)
     Register sp_minus_frame_size = temps.AcquireX();
     __ Sub(sp_minus_frame_size, sp, frame_size);
     Register interrupt_limit = temps.AcquireX();
-#endif // defined(__CHERI_PURE_CAPABILITY__)
     __ LoadStackLimit(interrupt_limit, StackLimitKind::kInterruptStackLimit);
     __ Cmp(sp_minus_frame_size, interrupt_limit);
     __ B(lo, &call_stack_guard);
@@ -3349,16 +3351,18 @@ void Builtins::Generate_CallFunction(MacroAssembler* masm,
         __ SmiTag(x0);
 #if defined(__CHERI_PURE_CAPABILITY__)
         __ Push(padregc, c0, c1, cp);
+        __ Mov(c0, c3);
 #else // defined(__CHERI_PURE_CAPABILITY__)
         __ Push(padreg, x0, x1, cp);
-#endif // defined(__CHERI_PURE_CAPABILITY__)
         __ Mov(x0, x3);
+#endif // defined(__CHERI_PURE_CAPABILITY__)
         __ Call(BUILTIN_CODE(masm->isolate(), ToObject),
                 RelocInfo::CODE_TARGET);
-        __ Mov(x3, x0);
 #if defined(__CHERI_PURE_CAPABILITY__)
+        __ Mov(c3, c0);
         __ Pop(cp, c1, c0, padregc);
 #else // defined(__CHERI_PURE_CAPABILITY__)
+        __ Mov(x3, x0);
         __ Pop(cp, x1, x0, padreg);
 #endif // defined(__CHERI_PURE_CAPABILITY__)
         __ SmiUntag(x0);
@@ -6173,8 +6177,13 @@ void CallApiFunctionAndReturn(MacroAssembler* masm, Register function_address,
   // Allocate HandleScope in callee-saved registers.
   // We will need to restore the HandleScope after the call to the API function,
   // by allocating it in callee-saved registers it'll be preserved by C code.
+#ifdef __CHERI_PURE_CAPABILITY__
+  Register prev_next_address_reg = c19;
+  Register prev_limit_reg = c20;
+#else   // !__CHERI_PURE_CAPABILITY__
   Register prev_next_address_reg = x19;
   Register prev_limit_reg = x20;
+#endif  // __CHERI_PURE_CAPABILITY__
   Register prev_level_reg = w21;
 
   // C arguments (arg_reg_1/2) are expected to be initialized outside, so this
@@ -6280,7 +6289,11 @@ void CallApiFunctionAndReturn(MacroAssembler* masm, Register function_address,
   } else {
     DCHECK_EQ(stack_space, 0);
     // {stack_space_operand} was loaded into {stack_space_reg} above.
+#ifdef __CHERI_PURE_CAPABILITY__
+    __ DropArguments(stack_space_reg.X());
+#else   // !__CHERI_PURE_CAPABILITY__
     __ DropArguments(stack_space_reg);
+#endif  // __CHERI_PURE_CAPABILITY__
   }
 
   __ Ret();
@@ -6308,10 +6321,18 @@ void CallApiFunctionAndReturn(MacroAssembler* masm, Register function_address,
     __ Str(prev_limit_reg, limit_mem_op);
     // Save the return value in a callee-save register.
     Register saved_result = prev_limit_reg;
-    __ Mov(saved_result, x0);
+    __ Mov(saved_result, return_value);
+#ifdef __CHERI_PURE_CAPABILITY__
+    __ Mov(carg_reg_1, ER::isolate_address(isolate));
+#else   // !__CHERI_PURE_CAPABILITY__
     __ Mov(arg_reg_1, ER::isolate_address(isolate));
+#endif  // __CHERI_PURE_CAPABILITY__
     __ CallCFunction(ER::delete_handle_scope_extensions(), 1);
+#ifdef __CHERI_PURE_CAPABILITY__
+    __ Mov(carg_reg_1, saved_result);
+#else   // !__CHERI_PURE_CAPABILITY__
     __ Mov(arg_reg_1, saved_result);
+#endif  // __CHERI_PURE_CAPABILITY__
     __ B(&leave_exit_frame);
   }
 }
@@ -6838,26 +6859,28 @@ void Generate_DeoptimizationEntry(MacroAssembler* masm,
       (saved_double_registers.Count() * kDRegSize);
 
   // Floating point registers are saved on the stack above core registers.
+#ifdef __CHERI_PURE_CAPABILITY__
+  const int kDoubleRegistersOffset = saved_registers.Count() * kCRegSize;
+#else // !__CHERI_PURE_CAPABILITY__
   const int kDoubleRegistersOffset = saved_registers.Count() * kXRegSize;
+#endif // __CHERI_PURE_CAPABILITY__
 
-#if defined(__CHERI_PURE_CAPABILITY__)
-  Register code_object = c2;
-  Register fp_to_sp = c3;
-#else // defined(__CHERI_PURE_CAPABILITY__)
-  Register code_object = x2;
   Register fp_to_sp = x3;
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#ifdef __CHERI_PURE_CAPABILITY__
+  Register code_object = c2;
+#else   // __CHERI_PURE_CAPABILITY__
+  Register code_object = x2;
+#endif  // __CHERI_PURE_CAPABILITY__
   // Get the address of the location in the code object. This is the return
   // address for lazy deoptimization.
   __ Mov(code_object, lr);
   // Compute the fp-to-sp delta.
-#if defined(__CHERI_PURE_CAPABILITY__)
-  __ Add(fp_to_sp, csp, kSavedRegistersAreaSize);
-  __ Sub(fp_to_sp, fp, fp_to_sp);
-#else // defined(__CHERI_PURE_CAPABILITY__)
   __ Add(fp_to_sp, sp, kSavedRegistersAreaSize);
+#ifdef __CHERI_PURE_CAPABILITY__
+  __ Sub(fp_to_sp, fp.X(), fp_to_sp);
+#else   // __CHERI_PURE_CAPABILITY__
   __ Sub(fp_to_sp, fp, fp_to_sp);
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // __CHERI_PURE_CAPABILITY__
 
   // Allocate a new deoptimizer object.
 #if defined(__CHERI_PURE_CAPABILITY__)
@@ -6923,8 +6946,13 @@ void Generate_DeoptimizationEntry(MacroAssembler* masm,
 #endif // defined(__CHERI_PURE_CAPABILITY__)
 
   // Copy double registers to the input frame.
+#ifdef __CHERI_PURE_CAPABILITY__
+  CopyRegListToFrame(masm, c1, FrameDescription::double_registers_offset(),
+                     saved_double_registers, x2, x3, kDoubleRegistersOffset);
+#else   // !__CHERI_PURE_CAPABILITY__
   CopyRegListToFrame(masm, x1, FrameDescription::double_registers_offset(),
                      saved_double_registers, x2, x3, kDoubleRegistersOffset);
+#endif  // __CHERI_PURE_CAPABILITY__
 
   // Mark the stack as not iterable for the CPU profiler which won't be able to
   // walk the stack without the return address.
@@ -7014,7 +7042,7 @@ void Generate_DeoptimizationEntry(MacroAssembler* masm,
   Label outer_push_loop, outer_loop_header;
 #if defined(__CHERI_PURE_CAPABILITY__)
   __ Ldrsw(x1, MemOperand(c4, Deoptimizer::output_count_offset()));
-  __ Ldr(x0, MemOperand(c4, Deoptimizer::output_offset()));
+  __ Ldr(c0, MemOperand(c4, Deoptimizer::output_offset()));
 #else // defined(__CHERI_PURE_CAPABILITY__)
   __ Ldrsw(x1, MemOperand(x4, Deoptimizer::output_count_offset()));
   __ Ldr(x0, MemOperand(x4, Deoptimizer::output_offset()));
