@@ -784,9 +784,11 @@ std::ostream& operator<<(std::ostream& os, TruncateKind kind) {
 // I'm adding an IntPtrT to a WordT, drawing a distinction between a
 // pointer and an integer constant so I don't think the operation is
 // commutative.
-#define MACHINE_PURE_OP_LIST_PURECAP(V)      \
-  V(CapAdd, Operator::kAssociative, 2, 0, 1) \
-  V(CapSub, Operator::kNoProperties, 2, 0, 1)
+#define MACHINE_PURE_OP_LIST_PURECAP(V)       \
+  V(CapAdd, Operator::kAssociative, 2, 0, 1)  \
+  V(CapSub, Operator::kNoProperties, 2, 0, 1) \
+  V(AlignU, Operator::kNoProperties, 2, 0, 1) \
+  V(AlignD, Operator::kNoProperties, 2, 0, 1)
 #endif // __CHERI_PURE_CAPABILITY__
 
 // The format is:
@@ -1828,6 +1830,13 @@ struct MachineOperatorGlobalCache {
   STACK_POINTER_GREATER_THAN(Wasm)
 #undef STACK_POINTER_GREATER_THAN
 
+  struct CapabilityIsTaggedOperator : public Operator {
+    CapabilityIsTaggedOperator()
+        : Operator(IrOpcode::kCapabilityIsTagged, Operator::kNoThrow,
+                   "CapabilityIsTagged", 1, 0, 0, 1, 0, 0) {}
+  };
+  CapabilityIsTaggedOperator kCapabilityIsTagged;
+
   struct I8x16SwizzleOperator final : public Operator1<bool> {
     I8x16SwizzleOperator()
         : Operator1<bool>(IrOpcode::kI8x16Swizzle, Operator::kPure,
@@ -2252,6 +2261,10 @@ const Operator* MachineOperatorBuilder::AbortCSADcheck() {
 
 const Operator* MachineOperatorBuilder::DebugBreak() {
   return &cache_.kDebugBreak;
+}
+
+const Operator* MachineOperatorBuilder::CapabilityIsTagged() {
+  return &cache_.kCapabilityIsTagged;
 }
 
 const Operator* MachineOperatorBuilder::Comment(const char* msg) {

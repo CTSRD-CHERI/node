@@ -1390,9 +1390,9 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
                          int>::type = 0>
   void StoreReference(Reference reference, TNode<T> value) {
     DCHECK(!IsMapOffsetConstant(reference.offset));
-#ifndef V8_COMPRESS_POINTERS
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
     DCHECK(reference.object.IsCapability());
-#endif  // V8_COMPRESS_POINTERS
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     TNode<IntPtrT> offset =
         IntPtrSub(reference.offset, IntPtrConstant(kHeapObjectTag));
     StoreToObject(MachineRepresentationOf<T>::value, reference.object, offset,
@@ -1401,12 +1401,35 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
 
   TNode<RawPtrT> GCUnsafeReferenceToRawPtr(TNode<Object> object,
                                            TNode<IntPtrT> offset) {
-#ifndef V8_COMPRESS_POINTERS
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
     DCHECK(object.IsCapability());
-#endif  // V8_COMPRESS_POINTERS
-    return ReinterpretCast<RawPtrT>(
-        IntPtrAdd(BitcastTaggedToWord(object),
-                  IntPtrSub(offset, IntPtrConstant(kHeapObjectTag))));
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
+    Label object_is_tagged(this), offset_is_tagged(this), out(this);
+    TVARIABLE(RawPtrT, result);
+    TNode<IntPtrT> object_intptr = BitcastTaggedToWord(object);
+    Branch(CapabilityIsTagged(object_intptr), &object_is_tagged,
+           &offset_is_tagged);
+
+    BIND(&object_is_tagged);
+    {
+      result = ReinterpretCast<RawPtrT>(IntPtrAdd(
+          object_intptr, IntPtrSub(offset, IntPtrConstant(kHeapObjectTag))));
+      Goto(&out);
+    }
+
+    BIND(&offset_is_tagged);
+    {
+      CSA_DCHECK(this, CapabilityIsTagged(offset));
+      result = ReinterpretCast<RawPtrT>(IntPtrAdd(
+          IntPtrSub(offset.MarkAsCapability(), IntPtrConstant(kHeapObjectTag)),
+          object_intptr));
+      Goto(&out);
+    }
+
+    BIND(&out);
+    CSA_DCHECK(this, CapabilityIsTagged(result.value()));
+    DCHECK(result.IsCapability());
+    return result.value();
   }
 
   // Load the floating point value of a HeapNumber.

@@ -236,7 +236,6 @@ class CodeAssemblerParameterizedLabel;
   V(CapSub, WordT, WordT, WordT)
 
 #define CODE_ASSEMBLER_BINARY_MAYBECAP_LIST(V)                          \
-  V(IntPtrSub, WordT, WordT, WordT)                                     \
   V(WordOr, WordT, WordT, WordT)                                        \
   V(WordAnd, WordT, WordT, WordT)                                       \
   V(WordXor, WordT, WordT, WordT)                                       \
@@ -436,7 +435,8 @@ TNode<Float64T> Float64Add(TNode<Float64T> a, TNode<Float64T> b);
   V(Int64AbsWithOverflow, PAIR_TYPE(Int64T, BoolT), Int64T)    \
   V(IntPtrAbsWithOverflow, PAIR_TYPE(IntPtrT, BoolT), IntPtrT) \
   V(Word32BinaryNot, BoolT, Word32T)                           \
-  V(StackPointerGreaterThan, BoolT, WordT)
+  V(StackPointerGreaterThan, BoolT, WordT)                     \
+  V(CapabilityIsTagged, BoolT, WordT)
 #else  // !__CHERI_PURE_CAPABILITY__
 #define CODE_ASSEMBLER_UNARY_OP_LIST(V)                        \
   V(Float64Abs, Float64T, Float64T)                            \
@@ -502,7 +502,8 @@ TNode<Float64T> Float64Add(TNode<Float64T> a, TNode<Float64T> b);
   V(Int64AbsWithOverflow, PAIR_TYPE(Int64T, BoolT), Int64T)    \
   V(IntPtrAbsWithOverflow, PAIR_TYPE(IntPtrT, BoolT), IntPtrT) \
   V(Word32BinaryNot, BoolT, Word32T)                           \
-  V(StackPointerGreaterThan, BoolT, WordT)
+  V(StackPointerGreaterThan, BoolT, WordT)                     \
+  V(CapabilityIsTagged, BoolT, WordT)
 #endif  // __CHERI_PURE_CAPABILITY__
 
 #ifdef __CHERI_PURE_CAPABILITY__
@@ -1128,6 +1129,7 @@ class V8_EXPORT_PRIVATE CodeAssembler {
   CODE_ASSEMBLER_PURECAP_BINARY_OP_LIST(DECLARE_CODE_ASSEMBLER_BINARY_OP)
   CODE_ASSEMBLER_BINARY_MAYBECAP_LIST(DECLARE_CODE_ASSEMBLER_BINARY_OP)
   TNode<WordT> IntPtrAdd(TNode<WordT> a, TNode<WordT> b);
+  TNode<WordT> IntPtrSub(TNode<WordT> a, TNode<WordT> b);
 #endif  // __CHERI_PURE_CAPABILITY__
 #undef DECLARE_CODE_ASSEMBLER_BINARY_OP
 

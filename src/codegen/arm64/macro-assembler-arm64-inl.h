@@ -298,32 +298,39 @@ void MacroAssembler::CzeroC(const Register& cd, Condition cond) {
   cselc(cd, czr, cd, cond);
 }
 
-void MacroAssembler::Gcvalue(const Register& cs, const Register& rd) {
+void MacroAssembler::Gctag(const Register& rd, const Register& cn) {
   DCHECK(allow_macro_instructions());
-  DCHECK(cs.Is128Bits());
+  DCHECK(cn.Is128Bits());
   DCHECK(rd.Is64Bits());
-  gcvalue(cs, rd);
+  gctag(rd, cn);
 }
 
-void MacroAssembler::Gclen(const Register& cs, const Register& rd) {
+void MacroAssembler::Gcvalue(const Register& rd, const Register& cn) {
   DCHECK(allow_macro_instructions());
-  DCHECK(cs.Is128Bits());
+  DCHECK(cn.Is128Bits());
   DCHECK(rd.Is64Bits());
-  gclen(cs, rd);
+  gcvalue(rd, cn);
 }
 
-void MacroAssembler::Gcbase(const Register& cs, const Register& rd) {
+void MacroAssembler::Gclen(const Register& rd, const Register& cn) {
   DCHECK(allow_macro_instructions());
-  DCHECK(cs.Is128Bits());
+  DCHECK(cn.Is128Bits());
   DCHECK(rd.Is64Bits());
-  gcbase(cs, rd);
+  gclen(rd, cn);
 }
 
-void MacroAssembler::Gcseal(const Register& cs, const Register& rd) {
+void MacroAssembler::Gcbase(const Register& rd, const Register& cn) {
   DCHECK(allow_macro_instructions());
-  DCHECK(cs.Is128Bits());
+  DCHECK(cn.Is128Bits());
   DCHECK(rd.Is64Bits());
-  gcseal(cs, rd);
+  gcbase(rd, cn);
+}
+
+void MacroAssembler::Gcseal(const Register& rd, const Register& cn) {
+  DCHECK(allow_macro_instructions());
+  DCHECK(cn.Is128Bits());
+  DCHECK(rd.Is64Bits());
+  gcseal(rd, cn);
 }
 
 void MacroAssembler::Scvalue(const Register& cd, const Register& cn,
@@ -371,6 +378,20 @@ void MacroAssembler::Subsc(const Register& rd, const Register& cn,
   } else {
     subsc(rd, cn, operand);
   }
+}
+
+void MacroAssembler::AlignU(const Register& cd, const Register& cn,
+                            const Operand& operand) {
+  DCHECK(allow_macro_instructions());
+  DCHECK(operand.IsImmediate());
+  alignu(cd, cn, operand);
+}
+
+void MacroAssembler::AlignD(const Register& cd, const Register& cn,
+                            const Operand& operand) {
+  DCHECK(allow_macro_instructions());
+  DCHECK(operand.IsImmediate());
+  alignd(cd, cn, operand);
 }
 #endif // __CHERI_PURE_CAPABILITY__
 
@@ -1116,7 +1137,7 @@ void MacroAssembler::Lsl(const Register& rd, const Register& rn,
     // TODO(gcjenkinson): Does this case actually make sense
     UseScratchRegisterScope temps(this);
     Register temp = temps.AcquireX();
-    Gcvalue(rn, temp);
+    Gcvalue(temp, rn);
     lsl(temp, temp, shift);
     Scvalue(rd, rd, temp);
     return;
@@ -1134,7 +1155,7 @@ void MacroAssembler::Lsl(const Register& rd, const Register& rn,
     // TODO(gcjenkinson): Does this case actually make sense
     UseScratchRegisterScope temps(this);
     Register temp = temps.AcquireX();
-    Gcvalue(rn, temp);
+    Gcvalue(temp, rn);
     lslv(rd, temp, rm);
     Scvalue(rn, rn, temp);
     return;
@@ -1152,7 +1173,7 @@ void MacroAssembler::Lsr(const Register& rd, const Register& rn,
     // TODO(gcjenkinson): Does this case actually make sense
     UseScratchRegisterScope temps(this);
     Register temp = temps.AcquireX();
-    Gcvalue(rn, temp);
+    Gcvalue(temp, rn);
     lsr(rd, temp, shift);
     Scvalue(rn, rn, temp);
     return;
@@ -1170,7 +1191,7 @@ void MacroAssembler::Lsr(const Register& rd, const Register& rn,
     // TODO(gcjenkinson): Does this case actually make sense
     UseScratchRegisterScope temps(this);
     Register temp = temps.AcquireX();
-    Gcvalue(rn, temp);
+    Gcvalue(temp, rn);
     lsrv(rd, temp, rm);
     Scvalue(rn, rn, temp);
     return;
