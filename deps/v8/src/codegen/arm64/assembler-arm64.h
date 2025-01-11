@@ -822,7 +822,11 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void cselc(const Register& cd, const Register& cn, const Register& cm,
             Condition cond);
   // Subtract capability and update status flags.
-  void subsc(const Register& rd, const Register& cn, const Operand& operand);
+  void subsc(const Register& cd, const Register& cn, const Operand& operand);
+  // Align up the capability.
+  void alignu(const Register& cd, const Register& cn, const Operand& operand);
+  // Align down the capability.
+  void alignd(const Register& cd, const Register& cn, const Operand& operand);
   // Copies a capability register
   void cpy(const Register& cd, const Register& cn);
   // Store a pair of capabilities
@@ -831,14 +835,16 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   // Load a pair of capabilities
   void ldpc(const Register& ct, const Register& ct2,
             const MemOperand& src);
+  // Load a capability tag field
+  void gctag(const Register& rd, const Register& cn);
   // Load a capability value field
-  void gcvalue(const Register& cd, const Register& rd);
+  void gcvalue(const Register& rd, const Register& cn);
   // Load a capability base field
-  void gcbase(const Register& cd, const Register& rd);
+  void gcbase(const Register& rd, const Register& cn);
   // Load a capability length field
-  void gclen(const Register& cd, const Register& rd);
+  void gclen(const Register& rd, const Register& cn);
   // Load a capability sealed flag
-  void gcseal(const Register& cd, const Register& rd);
+  void gcseal(const Register& rd, const Register& cn);
   // Store a capability value field
   void scvalue(const Register& cd, const Register& cn,
 	       const Register& rm);
@@ -2932,6 +2938,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   inline static Instr ImmRotate(unsigned immr, unsigned reg_size);
 #ifdef __CHERI_PURE_CAPABILITY__
   inline static Instr ImmSealForm(Cheri::SealImmediateForm form);
+  inline static Instr AlignImmLiteral(int imm6);
   inline static Instr CImmLLiteral(int imm17);
 #endif
   inline static Instr ImmLLiteral(int imm19);

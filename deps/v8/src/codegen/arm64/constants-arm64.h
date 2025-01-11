@@ -292,7 +292,9 @@ using float16 = uint16_t;
   V_(ImmAddSubCapability, 21, 10, Bits)                            \
   V_(ShiftAddSubCapability, 23, 22, Bits)                          \
   /* Morello ImmLLiteral (Imm17 as opposed to Imm19) */            \
-  V_(CImmLLiteral, 21, 5, Bits)
+  V_(CImmLLiteral, 21, 5, Bits)                                    \
+  /* Morello AlignU/AlignD 6-bit immediate */                      \
+  V_(AlignImmLiteral, 20, 15, Bits)
 #endif   // __CHERI_PURE_CAPABILITY__
 
 #define SYSTEM_REGISTER_FIELDS_LIST(V_, M_) \
@@ -3054,6 +3056,16 @@ using UnallocatedOp = uint32_t;
 constexpr UnallocatedOp UnallocatedFixed = 0x00000000;
 constexpr UnallocatedOp UnallocatedFMask = 0x00000000;
 
+#ifdef __CHERI_PURE_CAPABILITY__
+using AlignCapabilityOp = uint32_t;
+constexpr AlignCapabilityOp AlignCapabilityFixed = 0x42C01800;
+constexpr AlignCapabilityOp ALIGNU = AlignCapabilityFixed | 0x20004000;
+constexpr AlignCapabilityOp ALIGND = AlignCapabilityFixed | 0x80000000;
+
+static_assert(ALIGNU == 0x62c05800);
+static_assert(ALIGND == 0xc2c01800);
+#endif // __CHERI_PURE_CAPABILITY__
+
 #if defined(__CHERI_PURE_CAPABILITY__)
 using CopyCapabilityOp = uint32_t;
 constexpr CopyCapabilityOp CopyCapabilityFixed = 0xC2C19000;
@@ -3082,6 +3094,10 @@ constexpr GetField1Op GCLEN = GetField1Fixed | 0x00002000;
 // if the ObjectType field of the source Capability register is zero and writes
 // one otherwise.
 constexpr GetField1Op GCSEAL = GetField1Fixed | 0x0000A000;
+// 4.4.59 GCTAG
+// Get the Tag field of a capability gets the Tag field of the source Capability
+// register and writes the result to the destination register.
+constexpr GetField1Op GCTAG = GetField1Fixed | 0x00008000;
 // 4.4.61 GCVALUE
 // Get the Value field of a capability gets the range of the Value field of
 // a capability and writes the result to the destination register.

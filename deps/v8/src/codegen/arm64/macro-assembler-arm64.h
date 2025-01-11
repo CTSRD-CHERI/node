@@ -929,17 +929,22 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
 #if defined(__CHERI_PURE_CAPABILITY__)
   inline void Cmpc(const Register& cn, const Operand& operand);
   inline void Cpy(const Register& cd, const Register& cn);
-  inline void Gcvalue(const Register& cn, const Register& rd);
-  inline void Gcbase(const Register& cn, const Register& rd);
-  inline void Gclen(const Register& cn, const Register& rd);
-  inline void Gcseal(const Register& cn, const Register& rd);
+  inline void Gcvalue(const Register& rd, const Register& cn);
+  inline void Gcbase(const Register& rd, const Register& cn);
+  inline void Gclen(const Register& rd, const Register& cn);
+  inline void Gcseal(const Register& rd, const Register& cn);
+  inline void Gctag(const Register& rd, const Register& cn);
   inline void Scvalue(const Register& cd, const Register& cn, const Register& rm);
   inline void Scbndse(const Register& cd, const Register& cn, const Register& rm);
   inline void Build(const Register& cd, const Register& cn, const Register& cm);
   inline void Seal(const Register& cd, const Register& cn,
                    Cheri::SealImmediateForm form);
-  inline void Subsc(const Register& cd, const Register& cn,
+  inline void Subsc(const Register& rd, const Register& cn,
                     const Operand& operand);
+  inline void AlignU(const Register& cd, const Register& cn,
+                     const Operand& operand);
+  inline void AlignD(const Register& cd, const Register& cn,
+                     const Operand& operand);
 #endif // __CHERI_PURE_CAPABILITY__
 
   // Push or pop up to 4 registers of the same width to or from the stack.

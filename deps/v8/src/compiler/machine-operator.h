@@ -1162,6 +1162,11 @@ class V8_EXPORT_PRIVATE MachineOperatorBuilder final
   // applied for kFunctionEntry stack checks.
   const Operator* StackPointerGreaterThan(StackCheckKind kind);
 
+  // Returns a boolean which determines if the capability is tagged or not. On
+  // non-CHERI systems, this is always true.
+  const Operator* CapabilityIsTagged();
+
+
   // Loads the offset that should be applied to the current stack
   // pointer before a stack check. Used as input to the
   // Runtime::kStackGuardWithGap call.
@@ -1225,7 +1230,7 @@ class V8_EXPORT_PRIVATE MachineOperatorBuilder final
   // new_value_high, new_value_low
   const Operator* Word32AtomicPairCompareExchange();
 
-#if defined(__CHERI_PURE_CAPABILITY__)
+#ifdef __CHERI_PURE_CAPABILITY__
   const Operator* CapAdd();
   const Operator* CapSub();
 
@@ -1239,6 +1244,10 @@ class V8_EXPORT_PRIVATE MachineOperatorBuilder final
   const Operator* CapabilityAtomicXor(AtomicOpParameters params);
   const Operator* CapabilityAtomicExchange(AtomicOpParameters params);
   const Operator* CapabilityAtomicCompareExchange(AtomicOpParameters params);
+
+  // AlignU/AlignD.
+  const Operator* AlignU();
+  const Operator* AlignD();
 #endif // __CHERI_PURE_CAPABILITY__
 
   // Target machine word-size assumed by this builder.

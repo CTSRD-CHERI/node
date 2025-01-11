@@ -1493,25 +1493,31 @@ void Assembler::cselc(const Register& cd, const Register& cn,
   Emit(CSEL_c | Cm(cm) | Cond(cond) | Cn(cn) | Cd(cd));
 }
 
-void Assembler::gcvalue(const Register& cn, const Register& rd) {
+void Assembler::gctag(const Register& rd, const Register& cn) {
+  DCHECK(cn.Is128Bits());
+  DCHECK(rd.Is64Bits());
+  Emit(GCTAG | CnCSP(cn) | Rd(rd));
+}
+
+void Assembler::gcvalue(const Register& rd, const Register& cn) {
   DCHECK(cn.Is128Bits());
   DCHECK(rd.Is64Bits());
   Emit(GCVALUE | CnCSP(cn) | Rd(rd));
 }
 
-void Assembler::gclen(const Register& cn, const Register& rd) {
+void Assembler::gclen(const Register& rd, const Register& cn) {
   DCHECK(cn.Is128Bits());
   DCHECK(rd.Is64Bits());
   Emit(GCLEN | CnCSP(cn) | Rd(rd));
 }
 
-void Assembler::gcbase(const Register& cn, const Register& rd) {
+void Assembler::gcbase(const Register& rd, const Register& cn) {
   DCHECK(cn.Is128Bits());
   DCHECK(rd.Is64Bits());
   Emit(GCBASE | CnCSP(cn) | Rd(rd));
 }
 
-void Assembler::gcseal(const Register& cn, const Register& rd) {
+void Assembler::gcseal(const Register& rd, const Register& cn) {
   DCHECK(cn.Is128Bits());
   DCHECK(rd.Is64Bits());
   Emit(GCSEAL | CnCSP(cn) | Rd(rd));
@@ -1523,6 +1529,26 @@ void Assembler::subsc(const Register& rd, const Register& cn,
   DCHECK(cn.Is128Bits());
   DCHECK(operand.reg().IsC());
   Emit(SUBS_c | Cm(operand.reg()) | Cn(cn) | Rd(rd));
+}
+
+void Assembler::alignu(const Register& cd, const Register& cn,
+                       const Operand& operand) {
+  DCHECK(cd.Is128Bits());
+  DCHECK(cn.Is128Bits());
+  DCHECK(operand.IsImmediate());
+  int64_t immediate = operand.ImmediateValue();
+  DCHECK(is_uint6(immediate));
+  Emit(ALIGNU | AlignImmLiteral(immediate) | Cn(cn) | Cd(cd));
+}
+
+void Assembler::alignd(const Register& cd, const Register& cn,
+                       const Operand& operand) {
+  DCHECK(cd.Is128Bits());
+  DCHECK(cn.Is128Bits());
+  DCHECK(operand.IsImmediate());
+  int64_t immediate = operand.ImmediateValue();
+  DCHECK(is_uint6(immediate));
+  Emit(ALIGND | AlignImmLiteral(immediate) | Cn(cn) | Cd(cd));
 }
 
 bool Assembler::IsImmAddSubCapability(int64_t immediate) {
@@ -1795,6 +1821,7 @@ COMPARE_AND_SWAP_PAIR_LIST(DEFINE_ASM_FUNC)
     Emit(OP | Cs(cs) | Ct(ct) | CnCSP(src.base()));          \
   }
 COMPARE_AND_SWAP_CAPABILITY_LIST(DEFINE_ASM_FUNC)
+#undef DEFINE_ASM_FUNC
 #endif  // __CHERI_PURE_CAPABILITY__
 
 // These macros generate all the variations of the atomic memory operations,
