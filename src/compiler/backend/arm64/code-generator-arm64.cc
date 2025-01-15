@@ -1089,12 +1089,12 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         __ CallCFunction(ref, num_gp_parameters, num_fp_parameters);
       } else {
 #if defined(__CHERI_PURE_CAPABILITY__)
-	// TODO(gcjenkinson): Why is the MachineRepresentation kWord64
-	// and not a MachineRepresentation for a Capability type?
+        // TODO(gcjenkinson): Why is the MachineRepresentation kWord64
+        // and not a MachineRepresentation for a Capability type?
         Register func = i.InputRegisterCapability(0);
-#else // defined(__CHERI_PURE_CAPABILITY__)
+#else   // defined(__CHERI_PURE_CAPABILITY__)
         Register func = i.InputRegister(0);
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
         __ CallCFunction(func, num_gp_parameters, num_fp_parameters);
       }
       __ Bind(&return_location);
@@ -1493,8 +1493,8 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
 #ifdef __CHERI_PURE_CAPABILITY__
         if ((instr->OutputAt(0)->IsCapabilityRegister()) ||
             (instr->InputAt(0)->IsCapabilityRegister())) {
-          __ Ands(i.OutputRegisterCapability(),
-                  i.InputOrZeroRegisterCapability(0), i.InputOperand2_64(1));
+          __ Ands(i.OutputRegister64(),
+                  i.InputOrZeroRegister64(0), i.InputOperand2_64(1));
           return kSuccess;
         }
 #endif  // __CHERI_PURE_CAPABILITY__
@@ -1923,12 +1923,12 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         __ Poke(i.InputSimd128Register(0), operand);
       } else if (instr->InputAt(0)->IsFPRegister()) {
         __ Poke(i.InputFloat64Register(0), operand);
-#if defined(__CHERI_PURE_CAPABILITY__)
-      } else if (instr->InputAt(0)->IsCapabilityRegister()) {
-	__ Poke(i.InputOrZeroRegisterCapability(0), operand);
-#endif // defined(__CHERI_PURE_CAPABILITY__)
       } else {
+#ifdef __CHERI_PURE_CAPABILITY__
+        __ Poke(i.InputOrZeroRegisterCapability(0), operand);
+#else   // !__CHERI_PURE_CAPABILITY__
         __ Poke(i.InputOrZeroRegister64(0), operand);
+#endif  // __CHERI_PURE_CAPABILITY__
       }
       break;
     }
@@ -1937,14 +1937,14 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       if (instr->InputAt(0)->IsFPRegister()) {
         __ PokePair(i.InputFloat64Register(1), i.InputFloat64Register(0),
                     slot * kSystemPointerSize);
-#if defined(__CHERI_PURE_CAPABILITY__)
-      } else if (instr->InputAt(0)->IsCapabilityRegister()) {
-	__ PokePair(i.InputRegisterCapability(1), i.InputRegisterCapability(0),
-                    slot * kSystemPointerSize);
-#endif // defined(__CHERI_PURE_CAPABILITY__)
       } else {
+#ifdef __CHERI_PURE_CAPABILITY__
+        __ PokePair(i.InputRegisterCapability(1), i.InputRegisterCapability(0),
+                    slot * kSystemPointerSize);
+#else   // !__CHERI_PURE_CAPABILITY__
         __ PokePair(i.InputRegister(1), i.InputRegister(0),
                     slot * kSystemPointerSize);
+#endif  // __CHERI_PURE_CAPABILITY__
       }
       break;
     }
@@ -1964,8 +1964,8 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         }
 #if defined(__CHERI_PURE_CAPABILITY__)
       } else if (instr->OutputAt(0)->IsCapabilityRegister()) {
-	__ Ldr(i.OutputRegisterCapability(), MemOperand(fp, offset));
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+        __ Ldr(i.OutputRegisterCapability(), MemOperand(fp, offset));
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
       } else {
         __ Ldr(i.OutputRegister(), MemOperand(fp, offset));
       }
@@ -2387,8 +2387,6 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
 #if defined(__CHERI_PURE_CAPABILITY__)
     case kArm64StrCapability:
       // TODO(gcjenkinson): Why is the representation kWord64?
-      // DCHECK_WITH_MSG(instr->InputAt(0)->IsCapabilityRegister(),
-//		       MachineReprToString(LocationOperand::cast(instr->InputAt(0))->representation()));
       __ Str(i.InputOrZeroRegisterCapability(0), i.MemoryOperand(1));
       break;
     case kArm64StrPairCapability:
@@ -2396,7 +2394,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ Stp(i.InputOrZeroRegisterCapability(0),
              i.InputOrZeroRegisterCapability(1), i.MemoryOperand(2));
       break;
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif  // defined(__CHERI_PURE_CAPABILITY__)
     case kArm64StrCompressTagged:
       EmitOOLTrapIfNeeded(zone(), this, opcode, instr, __ pc_offset());
       __ StoreTaggedField(i.InputOrZeroRegister64(0), i.MemoryOperand(1));
