@@ -2195,11 +2195,13 @@ void Builtins::Generate_InterpreterPushArgsThenConstructImpl(
   Register num_args = x0;
 #if defined(__CHERI_PURE_CAPABILITY__)
   Register first_arg_index = c4;
+  Register spread_arg_out =
+      (mode == InterpreterPushArgsMode::kWithFinalSpread) ? c2 : no_reg;
 #else // defined(__CHERI_PURE_CAPABILITY__)
   Register first_arg_index = x4;
-#endif // defined(__CHERI_PURE_CAPABILITY__)
   Register spread_arg_out =
       (mode == InterpreterPushArgsMode::kWithFinalSpread) ? x2 : no_reg;
+#endif // defined(__CHERI_PURE_CAPABILITY__)
   GenerateInterpreterPushArgs(masm, num_args, first_arg_index, spread_arg_out,
                               ConvertReceiverMode::kNullOrUndefined, mode);
 
@@ -2633,7 +2635,7 @@ void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
 #endif // defined(__CHERI_PURE_CAPABILITY__)
       __ CallRuntime(Runtime::kLogOrTraceOptimizedOSREntry, 0);
 #if defined(__CHERI_PURE_CAPABILITY__)
-      __ Pop(c0, padregc);
+      __ Pop(padregc, c0);
 #else // defined(__CHERI_PURE_CAPABILITY__)
       __ Pop(padreg, x0);
 #endif // defined(__CHERI_PURE_CAPABILITY__)

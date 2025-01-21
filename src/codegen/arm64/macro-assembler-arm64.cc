@@ -279,16 +279,7 @@ void MacroAssembler::LogicalMacro(const Register& rd, const Register& rn,
         // If rd is the stack pointer we cannot use it as the destination
         // register so we use the temp register as an intermediate again.
         Logical(temp, rn, imm_operand, op);
-#if defined(__CHERI_PURE_CAPABILITY__)
-        // XXX(cheri): If we end up here using something like:
-        //  Orr(csp.X(), x0, 0x...);
-        // we will implicitly discard the .X() on the csp. While this doesn't
-        // seem like a reasonable thing to be doing in real code, the
-        // preshift_immediates test exposes this issue.
-        Mov(csp, temp);
-#else   // !__CHERI_PURE_CAPABILITY__
         Mov(sp, temp);
-#endif  // !__CHERI_PURE_CAPABILITY__
       } else {
         Logical(rd, rn, imm_operand, op);
       }
@@ -371,9 +362,11 @@ void MacroAssembler::PrepareC64JumpHelper(const Register& cd, const Register& te
 void MacroAssembler::PrepareC64Jump(const Register& cd) {
   DCHECK(allow_macro_instructions());
   DCHECK(cd.IsC());
-  UseScratchRegisterScope temps(this);
-  Register tempC = temps.AcquireC();
-  PrepareC64JumpHelper(cd, tempC);
+  Register scratch = AreAliased(cd, c0) ? c1 : c0;
+  Push(scratch, czr);
+  DCHECK(!AreAliased(scratch, cd));
+  PrepareC64JumpHelper(cd, scratch);
+  Pop(czr, scratch);
 }
 #endif
 
@@ -998,7 +991,8 @@ void MacroAssembler::AddSubMacro(const Register& rd, const Register& rn,
           MoveImmediateForShiftedOp(temp, operand.ImmediateValue(), mode);
 #ifdef __CHERI_PURE_CAPABILITY__
       if (rd.IsC() && imm_operand.shift_amount() > 4) {
-        DCHECK_NE(rd.code(), rn.code());
+        DCHECK(!AreAliased(rd, rn));
+        DCHECK_NE(rd, csp);
         AddSub(rd.X(), rn.X(), imm_operand, S, op);
         Scvalue(rd, rn, rd.X());
       } else {
@@ -3081,6 +3075,8 @@ void MacroAssembler::TailCallBuiltin(Builtin builtin, Condition cond) {
   // x17 is used to allow using "Call" (i.e. `bti c`) rather than "Jump"
   // (i.e. `bti j`) landing pads for the tail-called code.
 #if defined(__CHERI_PURE_CAPABILITY__)
+  UseScratchRegisterScope temps(this);
+  temps.Exclude(c17);
   Register temp = c17;
 #else   // !__CHERI_PURE_CAPABILITY__
   Register temp = x17;
@@ -4226,7 +4222,6 @@ void MacroAssembler::CheckPageFlag(const Register& object, int mask,
   UseScratchRegisterScope temps(this);
   Register scratch = temps.AcquireX();
 #if defined(__CHERI_PURE_CAPABILITY__)
-  Mov(scratch.C(), object);
   And(scratch.C(), object, ~kPageAlignmentMask);
   Ldr(scratch.X(), MemOperand(scratch, BasicMemoryChunk::kFlagsOffset));
 #else   // !__CHERI_PURE_CAPABILITY__
