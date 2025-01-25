@@ -502,7 +502,7 @@ void MacroAssembler::Mov(const Register& rd, const Operand& operand,
     Ldr(dst, operand);
   } else if (operand.IsImmediate()) {
 #ifdef __CHERI_PURE_CAPABILITY__
-    if (dst.IsC() && __builtin_cheri_tag_get(operand.ImmediateValue())) {
+    if (dst.IsC() && V8_CHERI_TAG_GET(operand.ImmediateValue())) {
       // In the case where we have a tagged pointer, we need to generate a
       // constant pool and perform a pcrel load-literal in order to preserve the
       // tag.
@@ -932,6 +932,7 @@ void MacroAssembler::CheriAddSub(const Register& rd, const Register& rn,
   if (rd.IsSP() || rn.code() == rd.code()) {
     UseScratchRegisterScope temps(this);
     Register temp = temps.AcquireX();
+    DCHECK(!AreAliased(rn, temp));
     AddSub(temp, rn.X(), operand, S, op);
     Scvalue(rd, rn, temp);
   } else {
@@ -1961,13 +1962,10 @@ void MacroAssembler::AssertCode(Register object) {
 
   UseScratchRegisterScope temps(this);
 #if defined(__CHERI_PURE_CAPABILITY__)
-  Register temp_object = temps.AcquireC();
-  Register temp_type = temps.AcquireX();
-
-  IsObjectType(object, temp_object, temp_type, CODE_TYPE);
+  Register temp = temps.AcquireC();
+  IsObjectType(object, temp.C(), temp.X(), CODE_TYPE);
 #else   // !__CHERI_PURE_CAPABILITY__
   Register temp = temps.AcquireX();
-
   IsObjectType(object, temp, temp, CODE_TYPE);
 #endif  // !__CHERI_PURE_CAPABILITY__
   Check(eq, AbortReason::kOperandIsNotACode);
@@ -2094,8 +2092,7 @@ void MacroAssembler::AssertUndefinedOrAllocationSite(Register object) {
   JumpIfRoot(object, RootIndex::kUndefinedValue, &done_checking);
   LoadMap(scratch, object);
 #if defined(__CHERI_PURE_CAPABILITY__)
-  Register temp_type = temps.AcquireX();
-  CompareInstanceType(scratch, temp_type, ALLOCATION_SITE_TYPE);
+  CompareInstanceType(scratch, scratch.X(), ALLOCATION_SITE_TYPE);
 #else   // !__CHERI_PURE_CAPABILITY__
   CompareInstanceType(scratch, scratch, ALLOCATION_SITE_TYPE);
 #endif  // !__CHERI_PURE_CAPABILITY__
