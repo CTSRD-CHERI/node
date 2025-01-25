@@ -2459,8 +2459,13 @@ void Generate_ContinueToBuiltinHelper(MacroAssembler* masm,
     } else {
       // Overwrite the hole inserted by the deoptimizer with the return value
       // from the LAZY deopt point.
+#ifdef __CHERI_PURE_CAPABILITY__
+      __ Str(c0, MemOperand(
+                     fp, BuiltinContinuationFrameConstants::kCallerSPOffset));
+#else   // !__CHERI_PURE_CAPABILITY__
       __ Str(x0, MemOperand(
                      fp, BuiltinContinuationFrameConstants::kCallerSPOffset));
+#endif  // __CHERI_PURE_CAPABILITY__
     }
   }
 
