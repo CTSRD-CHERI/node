@@ -1393,6 +1393,9 @@ void MacroAssembler::Switch(Register scratch, Register value,
   B(&fallthrough, hs);
   Adr(table, &jump_table);
   Ldr(table, MemOperand(table, value, LSL, kSystemPointerSizeLog2));
+#ifdef __CHERI_PURE_CAPABILITY__
+  PrepareC64Jump(table);
+#endif  // __CHERI_PURE_CAPABILITY__
   Br(table);
   // Emit the jump table inline, under the assumption that it's not too big.
   Align(kSystemPointerSize);
@@ -2832,7 +2835,8 @@ void MacroAssembler::JumpHelper(int64_t offset, RelocInfo::Mode rmode,
     UseScratchRegisterScope temps(this);
 #if defined(__CHERI_PURE_CAPABILITY__)
     Register temp = temps.AcquireC();
-    uint64_t imm = (reinterpret_cast<uint64_t>(pc_) + offset * kInstrSize) | 0x1;
+    uintptr_t imm =
+        (reinterpret_cast<uintptr_t>(pc_) + offset * kInstrSize) | 0x1;
 #else   // !__CHERI_PURE_CAPABILITY__
     Register temp = temps.AcquireX();
     uint64_t imm = reinterpret_cast<uint64_t>(pc_) + offset * kInstrSize;
@@ -2906,6 +2910,9 @@ void MacroAssembler::Jump(const ExternalReference& reference) {
 
 void MacroAssembler::Call(Register target) {
   BlockPoolsScope scope(this);
+#ifdef __CHERI_PURE_CAPABILITY__
+  PrepareC64Jump(target);
+#endif  // __CHERI_PURE_CAPABILITY__
   Blr(target);
 }
 
@@ -3174,6 +3181,7 @@ void MacroAssembler::StoreReturnAddressAndCall(Register target) {
     Cmp(c16, c17);
     Check(eq, AbortReason::kReturnAddressNotFoundInFrame);
   }
+  PrepareC64Jump(target);
 #else  // !__CHERI_PURE_CAPABILITY__
   temps.Exclude(x16, x17);
   DCHECK(!AreAliased(x16, x17, target));
@@ -3204,8 +3212,15 @@ void MacroAssembler::StoreReturnAddressAndCall(Register target) {
 void MacroAssembler::IndirectCall(Address target, RelocInfo::Mode rmode) {
   ASM_CODE_COMMENT(this);
   UseScratchRegisterScope temps(this);
+#ifdef __CHERI_PURE_CAPABILITY__
+  Register temp = temps.AcquireC();
+#else   // !__CHERI_PURE_CAPABILITY__
   Register temp = temps.AcquireX();
+#endif  // __CHERI_PURE_CAPABILITY__
   Mov(temp, Immediate(target, rmode));
+#ifdef __CHERI_PURE_CAPABILITY__
+  PrepareC64Jump(temp);
+#endif  // __CHERI_PURE_CAPABILITY__
   Blr(temp);
 }
 
