@@ -2459,13 +2459,8 @@ void Generate_ContinueToBuiltinHelper(MacroAssembler* masm,
     } else {
       // Overwrite the hole inserted by the deoptimizer with the return value
       // from the LAZY deopt point.
-#ifdef __CHERI_PURE_CAPABILITY__
-      __ Str(c0, MemOperand(
-                     fp, BuiltinContinuationFrameConstants::kCallerSPOffset));
-#else   // !__CHERI_PURE_CAPABILITY__
       __ Str(x0, MemOperand(
                      fp, BuiltinContinuationFrameConstants::kCallerSPOffset));
-#endif  // __CHERI_PURE_CAPABILITY__
     }
   }
 
@@ -6714,6 +6709,7 @@ void Builtins::Generate_DirectCEntry(MacroAssembler* masm) {
 
   __ Poke<MacroAssembler::kSignLR>(lr, 0);  // Store the return address.
 #if defined(__CHERI_PURE_CAPABILITY__)
+  __ PrepareC64Jump(c10);
   __ Blr(c10);                              // Call the C++ function.
 #else // defined(__CHERI_PURE_CAPABILITY__)
   __ Blr(x10);                              // Call the C++ function.

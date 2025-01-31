@@ -848,7 +848,30 @@ void RegExpMacroAssemblerARM64::PopRegExpBasePointer(Register stack_pointer_out,
          MemOperand(frame_pointer(), kRegExpStackBasePointerOffset));
   __ Mov(scratch, ref);
   __ Ldr(scratch, MemOperand(scratch));
+#ifdef __CHERI_PURE_CAPABILITY__
+  Label scratch_tagged, done;
+  {
+    UseScratchRegisterScope temps(masm_.get());
+    Register temp = temps.AcquireX();
+    __ Gctag(temp, scratch);
+    __ CompareAndBranch(temp, Operand(1), eq, &scratch_tagged);
+    if (v8_flags.debug_code) {
+      HardAbortScope hard_abort(masm_.get());  // Avoid calls to Abort.
+      Label good;
+      __ Gctag(temp, stack_pointer_out);
+      __ Tbnz(temp, 0, &good);
+      __ Abort(AbortReason::kUnexpectedStackPointer);
+      __ Bind(&good);
+    }
+    __ Add(stack_pointer_out, stack_pointer_out, scratch);
+    __ B(&done);
+  }
+  __ Bind(&scratch_tagged);
+  __ Add(stack_pointer_out, scratch, stack_pointer_out);
+  __ Bind(&done);
+#else   // !__CHERI_PURE_CAPABILITY__
   __ Add(stack_pointer_out, stack_pointer_out, scratch);
+#endif  // __CHERI_PURE_CAPABILITY__
   StoreRegExpStackPointerToMemory(stack_pointer_out, scratch);
 }
 
@@ -1386,7 +1409,11 @@ void RegExpMacroAssemblerARM64::PushBacktrack(Label* label) {
     __ Mov(w10, target + InstructionStream::kHeaderSize - kHeapObjectTag);
   } else {
     __ Adr(x10, label, MacroAssembler::kAdrFar);
+#ifdef __CHERI_PURE_CAPABILITY__
+    __ Sub(x10, x10, code_pointer().X());
+#else   // !__CHERI_PURE_CAPABILITY__
     __ Sub(x10, x10, code_pointer());
+#endif  // __CHERI_PURE_CAPABILITY__
     if (v8_flags.debug_code) {
       __ Cmp(x10, kWRegMask);
       // The code offset has to fit in a W register.
@@ -1619,7 +1646,11 @@ void RegExpMacroAssemblerARM64::CallCheckStackGuardState(Register scratch) {
   // AAPCS64 requires the stack to be 16 byte aligned.
   int alignment = masm_->ActivationFrameAlignment();
   DCHECK_EQ(alignment % 16, 0);
+#ifdef __CHERI_PURE_CAPABILITY__
+  int align_mask = (alignment / kCRegSize) - 1;
+#else   // !__CHERI_PURE_CAPABILITY__
   int align_mask = (alignment / kXRegSize) - 1;
+#endif  // __CHERI_PURE_CAPABILITY__
   int xreg_to_claim = (3 + align_mask) & ~align_mask;
 
   __ Claim(xreg_to_claim);
@@ -1866,6 +1897,20 @@ void RegExpMacroAssemblerARM64::RestoreLinkRegister() {
   __ Pop<MacroAssembler::kAuthLR>(padreg, lr);
 #endif  // __CHERI_PURE_CAPABILITY__
   __ Add(lr, lr, Operand(masm_->CodeObject()));
+#ifdef __CHERI_PURE_CAPABILITY__
+  {
+    Label done;
+    UseScratchRegisterScope temps(masm_.get());
+    Register temp = temps.AcquireC();
+    // FIXME(ds815): This probably doesn't work in every case -- the capability
+    // returned by adr might be in a different mapping from the return point.
+    __ Gcseal(temp.X(), lr);
+    __ Tbz(temp.X(), 0, &done);
+    __ adr(temp, 0);
+    __ Scvalue(lr, temp, lr.X());
+    __ Bind(&done);
+  }
+#endif  // __CHERI_PURE_CAPABILITY__
 }
 
 
