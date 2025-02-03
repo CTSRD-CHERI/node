@@ -49,6 +49,8 @@ vars = {
   'download_prebuilt_bazel': False,
   'check_v8_header_includes': False,
 
+  'ctsrd_cheri_url': 'https://github.com/CTSRD-CHERI',
+
   # By default, download the fuchsia sdk from the public sdk directory.
   'fuchsia_sdk_cipd_prefix': 'fuchsia/sdk/gn/',
 
@@ -220,7 +222,7 @@ deps = {
     'condition': 'checkout_android',
   },
   'third_party/depot_tools':
-    Var('chromium_url') + '/chromium/tools/depot_tools.git' + '@' + '4d73c057d82ac5994d992f0b1f57ca6d513c3554',
+    Var('ctsrd_cheri_url') + '/depot_tools.git' + '@' + '3f56b6cd5ec3f38232ab81a8cab2e3794d7d2149',
   'third_party/fuchsia-sdk/sdk': {
     'packages': [
         {
@@ -262,7 +264,7 @@ deps = {
       }
     ],
     'dep_type': 'cipd',
-    'condition': 'host_cpu != "s390" and host_cpu != "ppc"'
+    'condition': 'host_cpu != "s390" and host_cpu != "ppc" and host_os != freebsd'
   },
   'third_party/perfetto':
     Var('android_url') + '/platform/external/perfetto.git' + '@' + '0d180f46481a96cbe8340734fa5cdce3bba636c8',
@@ -287,7 +289,7 @@ deps = {
           'version': Var('luci_go'),
         },
       ],
-      'condition': 'host_cpu != "s390" and host_os != "aix"',
+      'condition': 'host_cpu != "s390" and host_os != "aix" and host_os != freebsd',
       'dep_type': 'cipd',
   },
 }
@@ -327,6 +329,16 @@ hooks = [
         'python3',
         'third_party/depot_tools/update_depot_tools_toggle.py',
         '--disable',
+    ],
+  },
+  {
+    'name': 'gn_link_system',
+    'pattern': '.',
+    'condition': 'host_os == "freebsd"',
+    'action': [ 'python3',
+                'third_party/depot_tools/link_system_dependencies.py',
+                '--source', '/usr/local64/bin/gn',
+                '--target', 'buildtools/freebsd/gn',
     ],
   },
   {
@@ -564,7 +576,7 @@ hooks = [
     'name': 'clang',
     'pattern': '.',
     # clang not supported on aix
-    'condition': 'host_os != "aix"',
+    'condition': 'host_os != "aix" and host_os != "freebsd"',
     'action': ['python3', 'tools/clang/scripts/update.py'],
   },
   {
