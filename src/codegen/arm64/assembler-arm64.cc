@@ -4142,25 +4142,24 @@ void Assembler::AddSub(const Register& rd, const Register& rn,
   if (operand.IsImmediate()) {
     int64_t immediate = operand.ImmediateValue();
     DCHECK(IsImmAddSub(immediate));
-#if defined(__CHERI_PURE_CAPABILITY__)
+#ifdef __CHERI_PURE_CAPABILITY__
     if (rd.IsC()) {
       DCHECK(rn.IsC());
       Emit(AddSubCapImmediateFixed | op |
            ImmAddSub(static_cast<int>(immediate)) | CdCSP(rd) | CnCSP(rn));
       return;
     }
-#endif // __CHERI_PURE_CAPABILITY__
+#endif  // __CHERI_PURE_CAPABILITY__
     Instr dest_reg = (S == SetFlags) ? Rd(rd) : RdSP(rd);
     Emit(SF(rd) | AddSubImmediateFixed | op | Flags(S) |
          ImmAddSub(static_cast<int>(immediate)) | dest_reg | RnSP(rn));
   } else if (operand.IsShiftedRegister()) {
-#if defined(__CHERI_PURE_CAPABILITY__)
-    DCHECK((operand.reg().SizeInBits(), rd.SizeInBits()) ||
-	   (operand.reg().SizeInBits() == kXRegSizeInBits &&
-	   rd.SizeInBits() == kCRegSizeInBits));
-#else
+#ifdef __CHERI_PURE_CAPABILITY__
+    DCHECK_IMPLIES(!operand.reg().IsC(),
+                   operand.reg().SizeInBits() == rd.SizeInBits());
+#else   // !__CHERI_PURE_CAPABILITY__
     DCHECK_EQ(operand.reg().SizeInBits(), rd.SizeInBits());
-#endif // __CHERI_PURE_CAPABILITY__
+#endif  // __CHERI_PURE_CAPABILITY__
     DCHECK_NE(operand.shift(), ROR);
 
     // For instructions of the form:
@@ -4171,27 +4170,9 @@ void Assembler::AddSub(const Register& rd, const Register& rn,
     // or their 64-bit register equivalents, convert the operand from shifted to
     // extended register mode, and emit an add/sub extended instruction.
     if (rn.IsSP() || rd.IsSP()) {
-#if defined(__CHERI_PURE_CAPABILITY__)
-      if (rn.IsC()) {
-        DCHECK(rd.IsC());
-        Instr dest_reg = (S == SetFlags) ? Cd(rd) : CdCSP(rd);
-        Emit(ADD_c_ext | Rm(operand.ToExtendedRegister().reg()) |
-             ExtendMode(operand.ToExtendedRegister().extend()) |
-             ImmExtendShift(operand.shift_amount()) | dest_reg | CnCSP(rn));
-        return;
-      }
-#endif  // __CHERI_PURE_CAPABILITY__
       DCHECK(!(rd.IsSP() && (S == SetFlags)));
       DataProcExtendedRegister(rd, rn, operand.ToExtendedRegister(), S,
                                AddSubExtendedFixed | op);
-#if defined(__CHERI_PURE_CAPABILITY__)
-    } else if (rn.IsC()) {
-      DCHECK(rd.IsC());
-      DCHECK_LE(operand.shift_amount(), 4);
-      Emit(ADD_c_ext | Rm(operand.ToExtendedRegister().reg()) |
-           ExtendMode(operand.ToExtendedRegister().extend()) |
-           ImmExtendShift(operand.shift_amount()) | Cd(rd) | Cn(rn));
-#endif  // __CHERI_PURE_CAPABILITY__
     } else {
       DataProcShiftedRegister(rd, rn, operand, S, AddSubShiftedFixed | op);
     }
@@ -4204,6 +4185,7 @@ void Assembler::AddSub(const Register& rd, const Register& rn,
            ImmExtendShift(operand.shift_amount()) | dest_reg | CnCSP(rn));
       return;
     }
+    DCHECK(!rd.IsC());
 #endif // __CHERI_PURE_CAPABILITY__
     DataProcExtendedRegister(rd, rn, operand, S, AddSubExtendedFixed | op);
   }
