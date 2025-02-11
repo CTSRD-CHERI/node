@@ -242,14 +242,22 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
                             Label* slow_path) {
     TNode<WordT> bucket_index =
         WordShr(slot_offset, SlotSet::kBitsPerBucketLog2 + kTaggedSizeLog2);
-    TNode<IntPtrT> bucket = UncheckedCast<IntPtrT>(
-        Load(MachineType::Pointer(), slot_set,
-             WordShl(bucket_index, kSystemPointerSizeLog2)));
+    TNode<IntPtrT> bucket =
+        UncheckedCast<IntPtrT>(
+            Load(MachineType::Pointer(), slot_set,
+                 WordShl(bucket_index, kSystemPointerSizeLog2)))
+            .MarkAsCapability();
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(bucket.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     GotoIf(WordEqual(bucket, IntPtrConstant(0)), slow_path);
     return bucket;
   }
 
   void SetBitInCell(TNode<IntPtrT> bucket, TNode<WordT> slot_offset) {
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(bucket.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     // Load cell value
     TNode<WordT> cell_offset = WordAnd(
         WordShr(slot_offset, SlotSet::kBitsPerCellLog2 + kTaggedSizeLog2 -
@@ -258,7 +266,11 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
                        << SlotSet::kCellSizeBytesLog2));
     // Provenance inherited from bucket.
     TNode<IntPtrT> cell_address =
-        UncheckedCast<IntPtrT>(IntPtrAdd(bucket, cell_offset));
+        UncheckedCast<IntPtrT>(IntPtrAdd(bucket, cell_offset))
+            .MarkAsCapability();
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(cell_address.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     TNode<IntPtrT> old_cell_value =
         ChangeInt32ToIntPtr(Load<Int32T>(cell_address));
 
@@ -298,6 +310,9 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
     Label generational_barrier(this), shared_barrier(this);
 
     TNode<IntPtrT> value = BitcastTaggedToWord(Load<HeapObject>(slot));
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(value.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
 
     InYoungGeneration(value, &generational_barrier, &shared_barrier);
 
@@ -315,6 +330,9 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
                                SaveFPRegsMode fp_mode) {
     TNode<IntPtrT> object = BitcastTaggedToWord(
         UncheckedParameter<Object>(WriteBarrierDescriptor::kObject));
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(object.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     InsertIntoRememberedSet(object, slot, fp_mode);
     Goto(next);
   }
@@ -325,6 +343,9 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
         ExternalReference::shared_barrier_from_code_function());
     TNode<IntPtrT> object = BitcastTaggedToWord(
         UncheckedParameter<Object>(WriteBarrierDescriptor::kObject));
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(object.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     CallCFunctionWithCallerSavedRegisters(
         function, MachineTypeOf<Int32T>::value, fp_mode,
         std::make_pair(MachineTypeOf<IntPtrT>::value, object),
@@ -362,6 +383,9 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
     BIND(&generational_barrier_check);
 
     TNode<IntPtrT> value = BitcastTaggedToWord(Load<HeapObject>(slot));
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(value.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
     InYoungGeneration(value, &generational_barrier_slow, &shared_barrier_check);
 
     BIND(&generational_barrier_slow);
@@ -406,6 +430,9 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
           ExternalReference::write_barrier_marking_from_code_function());
       TNode<IntPtrT> object = BitcastTaggedToWord(
           UncheckedParameter<Object>(WriteBarrierDescriptor::kObject));
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+      DCHECK(object.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
       CallCFunctionWithCallerSavedRegisters(
           function, MachineTypeOf<Int32T>::value, fp_mode,
           std::make_pair(MachineTypeOf<IntPtrT>::value, object),
@@ -426,6 +453,9 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
           ExternalReference::write_barrier_marking_from_code_function());
       TNode<IntPtrT> object = BitcastTaggedToWord(
           UncheckedParameter<Object>(WriteBarrierDescriptor::kObject));
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+      DCHECK(object.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
       CallCFunctionWithCallerSavedRegisters(
           function, MachineTypeOf<Int32T>::value, fp_mode,
           std::make_pair(MachineTypeOf<IntPtrT>::value, object),
@@ -465,6 +495,10 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
     TNode<IntPtrT> object = BitcastTaggedToWord(
         UncheckedParameter<Object>(WriteBarrierDescriptor::kObject));
     TNode<IntPtrT> value = BitcastTaggedToWord(Load<HeapObject>(slot));
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+    DCHECK(object.IsCapability());
+    DCHECK(value.IsCapability());
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
 
     // Without a shared heap, all objects are local. This is the fast path
     // always used when no shared heap exists.
@@ -1046,7 +1080,8 @@ TF_BUILTIN(CopyDataPropertiesWithExcludedPropertiesOnStack,
   auto excluded_property_count =
       UncheckedParameter<IntPtrT>(Descriptor::kExcludedPropertyCount);
   auto excluded_properties =
-      UncheckedParameter<IntPtrT>(Descriptor::kExcludedPropertyBase);
+      UncheckedParameter<IntPtrT>(Descriptor::kExcludedPropertyBase)
+          .MarkAsCapability();
   auto context = Parameter<Context>(Descriptor::kContext);
 
   // first check undefine or null
@@ -1065,9 +1100,10 @@ TF_BUILTIN(CopyDataPropertiesWithExcludedPropertiesOnStack,
   CSA_DCHECK(this, IntPtrEqual(WordAnd(excluded_properties,
                                        IntPtrConstant(kSmiTagMask)),
                                IntPtrConstant(kSmiTag)));
-  TailCallRuntime(Runtime::kCopyDataPropertiesWithExcludedPropertiesOnStack,
-                  context, source, SmiTag(excluded_property_count),
-                  BitcastWordToTaggedSigned(excluded_properties));
+  TailCallRuntime(
+      Runtime::kCopyDataPropertiesWithExcludedPropertiesOnStack, context,
+      source, SmiTag(excluded_property_count),
+      BitcastWordToTaggedSigned(excluded_properties).MarkAsInteger());
 }
 
 TF_BUILTIN(CopyDataPropertiesWithExcludedProperties,

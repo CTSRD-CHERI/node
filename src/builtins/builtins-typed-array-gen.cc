@@ -468,7 +468,9 @@ void TypedArrayBuiltinsAssembler::SetJSTypedArrayOffHeapDataPtr(
                                  SmiConstant(0));
 
   base = RawPtrAdd(base, Signed(offset));
-  CSA_DCHECK(this, CapabilityIsTagged(base));
+  CSA_DCHECK(this, Word32Or(CapabilityIsTagged(base),
+                            IntPtrEqual(base, IntPtrConstant(0))));
+
   StoreJSTypedArrayExternalPointerPtr(holder, base);
 }
 
