@@ -333,27 +333,9 @@ void MacroAssembler::PrepareC64JumpHelper(const Register& cd, const Register& te
   DCHECK(allow_macro_instructions());
   DCHECK(cd.IsC());
   Label not_sentry, done;
-  // Check if we need to set the C64 bit.
-  And(tempC.X(), cd.X(), 1);
-  Cmp(tempC.X(), 1);
-  B(eq, &done);
   // We need to OR the C64 bit.
   Gcseal(tempC.X(), cd);
-  Cmp(tempC.X(), xzr);
-  B(eq, &not_sentry);
-  // not_sentry == false => we have a sentry. Need to re-derive the capability
-  // from the PCC. We do this by overriding the original value of the register
-  // in order to avoid needing another temporary C-register and ease register
-  // pressure.
-  Orr(cd.X(), cd.X(), 0x1);
-  // FIXME(ds815): We might not be re-deriving this from the PCC.
-  adr(tempC, 0);  // Get the PCC
-  Scvalue(tempC, tempC, cd.X());
-  Seal(cd, tempC, Cheri::kSealFormRb);
-  B(&done);
-  bind(&not_sentry);
-  // not_sentry == true => we don't have a sentry. Simply OR the address and
-  // Scvalue it.
+  Tbnz(tempC.X(), 0, &done);
   Orr(tempC.X(), cd.X(), 0x1);
   Scvalue(cd, cd, tempC.X());
   bind(&done);
@@ -3167,6 +3149,9 @@ void MacroAssembler::JumpCodeObject(Register code_object, JumpMode jump_mode) {
   ASM_CODE_COMMENT(this);
   DCHECK_EQ(JumpMode::kJump, jump_mode);
   LoadCodeInstructionStart(code_object, code_object);
+#ifdef __CHERI_PURE_CAPABILITY__
+  PrepareC64Jump(code_object);
+#endif  // __CHERI_PURE_CAPABILITY__
   UseScratchRegisterScope temps(this);
 #if defined(__CHERI_PURE_CAPABILITY__)
   if (code_object != c17) {
