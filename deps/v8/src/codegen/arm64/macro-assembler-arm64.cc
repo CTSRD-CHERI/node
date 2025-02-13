@@ -312,13 +312,11 @@ void MacroAssembler::CheriSentryAdd(const Register& cd, const Register& cn,
   Register xn = cn.X();
 
   Gcseal(xd, cn);
-  Cmp(xd, xzr);
-  B(eq, &not_sentry);
+  Tbz(xd, 0, &not_sentry);
   Add(xn, xn, operand);
   Orr(xn, xn, 0x1);  // C64 bit
   adr(cd, 0);
   Scvalue(cd, cd, xn);
-  Seal(cd, cd, Cheri::kSealFormRb);
   B(&sentry_done);
 
   Bind(&not_sentry);
@@ -332,23 +330,37 @@ void MacroAssembler::CheriSentryAdd(const Register& cd, const Register& cn,
 void MacroAssembler::PrepareC64JumpHelper(const Register& cd, const Register& tempC) {
   DCHECK(allow_macro_instructions());
   DCHECK(cd.IsC());
-  Label not_sentry, done;
+  Label not_sentry, done, ok;
   // We need to OR the C64 bit.
   Gcseal(tempC.X(), cd);
   Tbnz(tempC.X(), 0, &done);
   Orr(tempC.X(), cd.X(), 0x1);
   Scvalue(cd, cd, tempC.X());
   bind(&done);
+  if (v8_flags.debug_code) {
+    Tbnz(cd.X(), 0, &ok);
+    // Can't call Abort here because it will call back into this helper.
+    Trap();
+  }
+  bind(&ok);
 }
 
 void MacroAssembler::PrepareC64Jump(const Register& cd) {
   DCHECK(allow_macro_instructions());
   DCHECK(cd.IsC());
-  Register scratch = AreAliased(cd, c0) ? c1 : c0;
-  Push(scratch, czr);
-  DCHECK(!AreAliased(scratch, cd));
-  PrepareC64JumpHelper(cd, scratch);
-  Pop(czr, scratch);
+  UseScratchRegisterScope temps(this);
+  if (temps.CanAcquire()) {
+    Register scratch = temps.AcquireC();
+    DCHECK(!AreAliased(scratch, cd));
+    PrepareC64JumpHelper(cd, scratch);
+  } else {
+    // No registers available, spill c0 or c1.
+    Register scratch = AreAliased(cd, c0) ? c1 : c0;
+    Push(scratch, czr);
+    DCHECK(!AreAliased(scratch, cd));
+    PrepareC64JumpHelper(cd, scratch);
+    Pop(czr, scratch);
+  }
 }
 #endif
 
