@@ -951,6 +951,12 @@ parser.add_argument('-C',
 
 (options, args) = parser.parse_known_args()
 
+if options.cheri:
+  CC = 'env CCACHE_PREFIX=distcc CCACHE_SLOPPINESS=time_macros ccache /usr/local64/bin/clang'
+  CXX = 'env CCACHE_PREFIX=distcc CCACHE_SLOPPINESS=time_macros ccache /usr/local64/bin/clang++'
+  options.dest_os = 'freebsd'
+  options.dest_cpu = 'arm64'
+
 # Expand ~ in the install prefix now, it gets written to multiple files.
 options.prefix = str(Path(options.prefix or '').expanduser())
 
