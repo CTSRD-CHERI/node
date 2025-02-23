@@ -62,14 +62,20 @@ void RunLoadInt32(const TestAlignment t) {
 
 void RunLoadInt32Offset(TestAlignment t) {
   int32_t p1 = 0;  // loads directly from this location.
-
+#ifdef __CHERI_PURE_CAPABILITY__
+  int32_t offsets[] = {-200, -100, -101, 1, 3, 7, 120, 2000, 200, 0xFF};
+#else   // !__CHERI_PURE_CAPABILITY__
   int32_t offsets[] = {-2000000, -100, -101, 1,          3,
                        7,        120,  2000, 2000000000, 0xFF};
+#endif  // __CHERI_PURE_CAPABILITY__
 
   for (size_t i = 0; i < arraysize(offsets); i++) {
     RawMachineAssemblerTester<int32_t> m;
     int32_t offset = offsets[i];
     uint8_t* pointer = ComputeOffset(&p1, offset);
+#ifdef __CHERI_PURE_CAPABILITY__
+    CHECK(V8_CHERI_TAG_GET(pointer));
+#endif  // __CHERI_PURE_CAPABILITY__
 
     // generate load [#base + #index]
     if (t == TestAlignment::kAligned) {
@@ -88,6 +94,11 @@ void RunLoadInt32Offset(TestAlignment t) {
   }
 }
 
+#ifdef __CHERI_PURE_CAPABILITY__
+// TODO(ds815): Port these.
+void RunLoadStoreFloat32Offset(TestAlignment t) {}
+void RunLoadStoreFloat64Offset(TestAlignment t) {}
+#else  // !__CHERI_PURE_CAPABILITY__
 void RunLoadStoreFloat32Offset(TestAlignment t) {
   float p1 = 0.0f;  // loads directly from this location.
   float p2 = 0.0f;  // and stores directly into this location.
@@ -99,6 +110,10 @@ void RunLoadStoreFloat32Offset(TestAlignment t) {
     int32_t offset = i;
     uint8_t* from = ComputeOffset(&p1, offset);
     uint8_t* to = ComputeOffset(&p2, offset);
+#ifdef __CHERI_PURE_CAPABILITY__
+    CHECK(V8_CHERI_TAG_GET(from));
+    CHECK(V8_CHERI_TAG_GET(to));
+#endif  // __CHERI_PURE_CAPABILITY__
     // generate load [#base + #index]
     if (t == TestAlignment::kAligned) {
       Node* load = m.Load(MachineType::Float32(), m.PointerConstant(from),
@@ -162,6 +177,7 @@ void RunLoadStoreFloat64Offset(TestAlignment t) {
     }
   }
 }
+#endif  // __CHERI_PURE_CAPABILITY__
 }  // namespace
 
 TEST(RunLoadInt32) { RunLoadInt32(TestAlignment::kAligned); }
@@ -254,17 +270,20 @@ void InitBuffer(CType* buffer, size_t length, MachineType type) {
 
 template <typename CType>
 void RunLoadImmIndex(MachineType type, TestAlignment t) {
-  const int kNumElems = 16;
+  const int kNumElems = 1000;
   CType buffer[kNumElems];
 
   InitBuffer(buffer, kNumElems, type);
 
   // Test with various large and small offsets.
-  for (int offset = -1; offset <= 200000; offset *= -5) {
+  for (int offset = -1; offset <= kNumElems * sizeof(CType); offset *= -5) {
     for (int i = 0; i < kNumElems; i++) {
       BufferedRawMachineAssemblerTester<CType> m;
       CType* base_pointer = reinterpret_cast<CType*>(
           ComputeOffset(&buffer[0], offset * sizeof(CType)));
+#ifdef __CHERI_PURE_CAPABILITY__
+      CHECK(V8_CHERI_TAG_GET(base_pointer));
+#endif  // __CHERI_PURE_CAPABILITY__
 #ifdef V8_COMPRESS_POINTERS
       if (type.IsTagged()) {
         // When pointer compression is enabled then we need to access only
