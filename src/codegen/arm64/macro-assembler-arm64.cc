@@ -3687,15 +3687,21 @@ void MacroAssembler::TruncateDoubleToI(Isolate* isolate, Zone* zone,
 
   // If we fell through then inline version didn't succeed - call stub instead.
   if (lr_status == kLRHasNotBeenSaved) {
-    Push<MacroAssembler::kSignLR>(lr, double_input);
-#if defined(__CHERI_PURE_CAPABILITY__)
-    Push<MacroAssembler::kSignLR>(lr);
-    Push(padregx, double_input);
+#ifdef __CHERI_PURE_CAPABILITY__
+    // Make sure we're dealing with a D register here.
+    DCHECK(double_input.Is64Bits());
+    Push<MacroAssembler::kSignLR>(lr, czr);
+    Str(double_input, MemOperand(csp, 8));
 #else   // !__CHERI_PURE_CAPABILITY__
     Push<MacroAssembler::kSignLR>(lr, double_input);
-#endif  // !__CHERI_PURE_CAPABILITY__
+#endif  // __CHERI_PURE_CAPABILITY__
   } else {
+#ifdef __CHERI_PURE_CAPABILITY__
+    Push<MacroAssembler::kDontStoreLR>(czr, czr);
+    Str(double_input, MemOperand(csp, 8));
+#else   // !__CHERI_PURE_CAPABILITY__
     Push<MacroAssembler::kDontStoreLR>(xzr, double_input);
+#endif  // __CHERI_PURE_CAPABILITY__
   }
 
   // DoubleToI preserves any registers it needs to clobber.
@@ -3709,21 +3715,21 @@ void MacroAssembler::TruncateDoubleToI(Isolate* isolate, Zone* zone,
   } else {
     CallBuiltin(Builtin::kDoubleToI);
   }
-#if defined(__CHERI_PURE_CAPABILITY__)
-  Ldr(result, MemOperand(csp, 0));
+#ifdef __CHERI_PURE_CAPABILITY__
+  Ldr(result, MemOperand(csp, 8));
 #else   // !__CHERI_PURE_CAPABILITY__
   Ldr(result, MemOperand(sp, 0));
-#endif  // !__CHERI_PURE_CAPABILITY__
+#endif  // __CHERI_PURE_CAPABILITY__
 
   DCHECK_EQ(xzr.SizeInBytes(), double_input.SizeInBytes());
 
   if (lr_status == kLRHasNotBeenSaved) {
     // Pop into xzr here to drop the double input on the stack:
-#if defined(__CHERI_PURE_CAPABILITY__)
-    Pop<MacroAssembler::kAuthLR>(lr);
+#ifdef __CHERI_PURE_CAPABILITY__
+    Pop<MacroAssembler::kAuthLR>(czr, lr);
 #else   // !__CHERI_PURE_CAPABILITY__
     Pop<MacroAssembler::kAuthLR>(xzr, lr);
-#endif  // !__CHERI_PURE_CAPABILITY__
+#endif  // __CHERI_PURE_CAPABILITY__
   } else {
     Drop(2);
   }
