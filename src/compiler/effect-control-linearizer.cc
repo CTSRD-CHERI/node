@@ -6890,10 +6890,17 @@ Node* EffectControlLinearizer::AdaptFastCallArgument(
 
             Node* length_in_bytes =
                 __ LoadField(AccessBuilder::ForStringLength(), node);
+#ifdef __CHERI_PURE_CAPABILITY__
+            Node* data_ptr =
+                __ CapAdd(__ BitcastTaggedToWord(node),
+                          __ IntPtrConstant(SeqOneByteString::kHeaderSize -
+                                            kHeapObjectTag));
+#else   // !__CHERI_PURE_CAPABILITY__
             Node* data_ptr =
                 __ IntPtrAdd(__ BitcastTaggedToWord(node),
                              __ IntPtrConstant(SeqOneByteString::kHeaderSize -
                                                kHeapObjectTag));
+#endif  // __CHERI_PURE_CAPABILITY__
 
             constexpr int kAlign = alignof(FastOneByteString);
             constexpr int kSize = sizeof(FastOneByteString);
@@ -7443,7 +7450,21 @@ Node* EffectControlLinearizer::BuildTypedArrayDataPointer(Node* base,
       // details.
       base = ChangeUint32ToUintPtr(base);
     }
+#ifdef __CHERI_PURE_CAPABILITY__
+    auto end = __ MakeLabel(MachineRepresentation::kCapability64);
+    auto base_is_tagged = __ MakeLabel();
+
+    __ GotoIf(__ CapabilityIsTagged(base), &base_is_tagged);
+    { __ Goto(&end, __ CapAdd(external, base)); }
+
+    __ Bind(&base_is_tagged);
+    { __ Goto(&end, __ CapAdd(base, external)); }
+
+    __ Bind(&end);
+    return end.PhiAt(0);
+#else   // !__CHERI_PURE_CAPABILITY__
     return __ IntPtrAdd(base, external);
+#endif  // __CHERI_PURE_CAPABILITY__
   }
 }
 

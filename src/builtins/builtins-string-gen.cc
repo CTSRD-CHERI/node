@@ -1807,18 +1807,40 @@ void StringBuiltinsAssembler::CopyStringCharacters(
   ElementsKind to_kind = to_one_byte ? UINT8_ELEMENTS : UINT16_ELEMENTS;
   static_assert(SeqOneByteString::kHeaderSize == SeqTwoByteString::kHeaderSize);
   int header_size = SeqOneByteString::kHeaderSize - kHeapObjectTag;
-#ifndef V8_COMPRESS_POINTERS
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+  DCHECK(from_string.IsCapability());
+
+  Label index_is_tagged(this), have_string_ptr(this);
+  TVARIABLE(RawPtrT, real_string_ptr, PointerConstant(0));
+  TVARIABLE(IntPtrT, real_index, IntPtrConstant(0));
+  GotoIf(CapabilityIsTagged(UncheckedCast<UintPtrT>(from_index)),
+         &index_is_tagged);
+  {
+    real_string_ptr = ReinterpretCast<RawPtrT>(from_string);
+    real_index = from_index;
+    Goto(&have_string_ptr);
+  }
+
+  BIND(&index_is_tagged);
+  {
+    real_string_ptr = ReinterpretCast<RawPtrT>(from_index);
+    real_index = ReinterpretCast<IntPtrT>(from_string);
+    Goto(&have_string_ptr);
+  }
+
+  BIND(&have_string_ptr);
+
+  CSA_DCHECK(this, CapabilityIsTagged(real_string_ptr.value()));
   TNode<IntPtrT> from_offset =
-      ElementOffsetFromIndex(from_index, from_kind, header_size)
-          .MarkAsCapability();
+      ElementOffsetFromIndex(real_index.value(), from_kind, header_size);
   TNode<IntPtrT> to_offset =
-      ElementOffsetFromIndex(to_index, to_kind, header_size).MarkAsCapability();
-#else   // V8_COMPRESS_POINTERS
+      ElementOffsetFromIndex(to_index, to_kind, header_size);
+#else   // !(__CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS)
   TNode<IntPtrT> from_offset =
       ElementOffsetFromIndex(from_index, from_kind, header_size);
   TNode<IntPtrT> to_offset =
       ElementOffsetFromIndex(to_index, to_kind, header_size);
-#endif  // !V8_COMPRESS_POINTERS
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
   TNode<IntPtrT> byte_count =
       ElementOffsetFromIndex(character_count, from_kind);
   TNode<IntPtrT> limit_offset = IntPtrAdd(from_offset, byte_count);
@@ -1834,6 +1856,25 @@ void StringBuiltinsAssembler::CopyStringCharacters(
   TVARIABLE(IntPtrT, current_to_offset, to_offset);
   VariableList vars({&current_to_offset}, zone());
   int to_index_constant = 0, from_index_constant = 0;
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
+  bool index_same =
+      (from_encoding == to_encoding) &&
+      (real_index.value() == to_index ||
+       (TryToInt32Constant(real_index.value(), &from_index_constant) &&
+        TryToInt32Constant(to_index, &to_index_constant) &&
+        from_index_constant == to_index_constant));
+  BuildFastLoop<IntPtrT>(
+      vars, from_offset, limit_offset,
+      [&](TNode<IntPtrT> offset) {
+        StoreNoWriteBarrier(rep, to_string,
+                            index_same ? offset : current_to_offset.value(),
+                            Load(type, real_string_ptr.value(), offset));
+        if (!index_same) {
+          Increment(&current_to_offset, to_increment);
+        }
+      },
+      from_increment, LoopUnrollingMode::kYes, IndexAdvanceMode::kPost);
+#else   // !(__CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS)
   bool index_same = (from_encoding == to_encoding) &&
                     (from_index == to_index ||
                      (TryToInt32Constant(from_index, &from_index_constant) &&
@@ -1850,6 +1891,7 @@ void StringBuiltinsAssembler::CopyStringCharacters(
         }
       },
       from_increment, LoopUnrollingMode::kYes, IndexAdvanceMode::kPost);
+#endif  // __CHERI_PURE_CAPABILITY__ && !V8_COMPRESS_POINTERS
 }
 
 // A wrapper around CopyStringCharacters which determines the correct string
@@ -1923,7 +1965,8 @@ TNode<String> StringBuiltinsAssembler::SubString(TNode<String> string,
   // and extract the underlying string.
 
   TNode<String> direct_string = to_direct.TryToDirect(&runtime);
-  TNode<IntPtrT> offset = IntPtrAdd(from, to_direct.offset());
+  TNode<IntPtrT> offset =
+      IntPtrAdd(to_direct.offset().MarkAsCapability(), from);
   const TNode<Int32T> instance_type = to_direct.instance_type();
 
   // The subject string can only be external or sequential string of either
@@ -1976,10 +2019,8 @@ TNode<String> StringBuiltinsAssembler::SubString(TNode<String> string,
   {
     const TNode<RawPtrT> fake_sequential_string =
         to_direct.PointerToString(&runtime);
-
     var_result = AllocAndCopyStringCharacters(
         fake_sequential_string, instance_type, offset, substr_length);
-
     Goto(&end);
   }
 
