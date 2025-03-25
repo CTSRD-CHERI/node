@@ -1305,11 +1305,16 @@ void MacroAssembler::Tbnz(const Register& rt, unsigned bit_pos, Label* label) {
   bool need_extra_instructions =
       NeedExtraInstructionsOrRegisterBranch(label, TestBranchType);
 
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rt = rt.IsC() ? rt.X() : rt;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rt = rt;
+#endif  // __CHERI_PURE_CAPABILITY__
   if (need_extra_instructions) {
-    tbz(rt, bit_pos, &done);
+    tbz(integer_rt, bit_pos, &done);
     B(label);
   } else {
-    tbnz(rt, bit_pos, label);
+    tbnz(integer_rt, bit_pos, label);
   }
   bind(&done);
 }
@@ -1321,28 +1326,16 @@ void MacroAssembler::Tbz(const Register& rt, unsigned bit_pos, Label* label) {
   bool need_extra_instructions =
       NeedExtraInstructionsOrRegisterBranch(label, TestBranchType);
 
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rt = rt.IsC() ? rt.X() : rt;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rt = rt;
+#endif  // __CHERI_PURE_CAPABILITY__
   if (need_extra_instructions) {
-#if defined(__CHERI_PURE_CAPABILITY__)
-    if (rt.IsC()) {
-      tbz(rt.X(), bit_pos, label);
-    } else {
-      tbnz(rt, bit_pos, &done);
-      B(label);
-    }
-#else   // !__CHERI_PURE_CAPABILITY__
-    tbnz(rt, bit_pos, &done);
+    tbnz(integer_rt, bit_pos, &done);
     B(label);
-#endif  // __CHERI_PURE_CAPABILITY__
   } else {
-#if defined(__CHERI_PURE_CAPABILITY__)
-    if (rt.IsC()) {
-      tbz(rt.X(), bit_pos, label);
-    } else {
-      tbz(rt, bit_pos, label);
-    }
-#else   // !__CHERI_PURE_CAPABILITY__
-    tbz(rt, bit_pos, label);
-#endif  // __CHERI_PURE_CAPABILITY__
+    tbz(integer_rt, bit_pos, label);
   }
   bind(&done);
 }
@@ -1354,11 +1347,16 @@ void MacroAssembler::Cbnz(const Register& rt, Label* label) {
   bool need_extra_instructions =
       NeedExtraInstructionsOrRegisterBranch(label, CompareBranchType);
 
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rt = rt.IsC() ? rt.X() : rt;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rt = rt;
+#endif  // __CHERI_PURE_CAPABILITY__
   if (need_extra_instructions) {
-    cbz(rt, &done);
+    cbz(integer_rt, &done);
     B(label);
   } else {
-    cbnz(rt, label);
+    cbnz(integer_rt, label);
   }
   bind(&done);
 }
@@ -1370,11 +1368,16 @@ void MacroAssembler::Cbz(const Register& rt, Label* label) {
   bool need_extra_instructions =
       NeedExtraInstructionsOrRegisterBranch(label, CompareBranchType);
 
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rt = rt.IsC() ? rt.X() : rt;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rt = rt;
+#endif  // __CHERI_PURE_CAPABILITY__
   if (need_extra_instructions) {
-    cbnz(rt, &done);
+    cbnz(integer_rt, &done);
     B(label);
   } else {
-    cbz(rt, label);
+    cbz(integer_rt, label);
   }
   bind(&done);
 }
@@ -3944,20 +3947,25 @@ void MacroAssembler::LoadGlobalProxy(Register dst) {
 void MacroAssembler::LoadWeakValue(Register out, Register in,
                                    Label* target_if_cleared) {
   ASM_CODE_COMMENT(this);
-#if defined(__CHERI_PURE_CAPABILITY__)
+#ifdef __CHERI_PURE_CAPABILITY__
   if (out.IsC()) {
     DCHECK(in.IsC());
-    UseScratchRegisterScope temps(this);
 
     CompareAndBranch(in.W(), Operand(kClearedWeakHeapObjectLower32), eq,
                      target_if_cleared);
 
-    Register temp_out = temps.AcquireX();
-    and_(temp_out, in.X(), Operand(~kWeakHeapObjectMask));
-    Scvalue(out, out, temp_out);
+    if (AreAliased(out, in) || out.IsSP()) {
+      UseScratchRegisterScope temps(this);
+      Register temp_out = temps.AcquireX();
+      and_(temp_out, in.X(), Operand(~kWeakHeapObjectMask));
+      Scvalue(out, in, temp_out);
+    } else {
+      and_(out.X(), in.X(), Operand(~kWeakHeapObjectMask));
+      Scvalue(out, in, out.X());
+    }
     return;
   }
-#endif   // __CHERI_PURE_CAPABILITY__
+#endif  // __CHERI_PURE_CAPABILITY__
 
   CompareAndBranch(in.W(), Operand(kClearedWeakHeapObjectLower32), eq,
                    target_if_cleared);
@@ -4081,6 +4089,9 @@ void MacroAssembler::CompareInstanceTypeRange(Register map, Register type_reg,
                                               InstanceType higher_limit) {
   ASM_CODE_COMMENT(this);
   DCHECK_LT(lower_limit, higher_limit);
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!type_reg.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   UseScratchRegisterScope temps(this);
   Register scratch = temps.AcquireX();
   Ldrh(type_reg, FieldMemOperand(map, Map::kInstanceTypeOffset));

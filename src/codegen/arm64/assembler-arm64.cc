@@ -4285,6 +4285,11 @@ void Assembler::AddSubWithCarry(const Register& rd, const Register& rn,
                                 AddSubWithCarryOp op) {
   DCHECK_EQ(rd.SizeInBits(), rn.SizeInBits());
   DCHECK_EQ(rd.SizeInBits(), operand.reg().SizeInBits());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!operand.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   DCHECK(operand.IsShiftedRegister() && (operand.shift_amount() == 0));
   DCHECK(!operand.NeedsRelocation(this));
   Emit(SF(rd) | op | Flags(S) | Rm(operand.reg()) | Rn(rn) | Rd(rd));
@@ -4391,6 +4396,10 @@ void Assembler::ConditionalCompare(const Register& rn, const Operand& operand,
                                    StatusFlags nzcv, Condition cond,
                                    ConditionalCompareOp op) {
   Instr ccmpop;
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rn.IsC());
+  DCHECK(!operand.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   DCHECK(!operand.NeedsRelocation(this));
   if (operand.IsImmediate()) {
     int64_t immediate = operand.ImmediateValue();

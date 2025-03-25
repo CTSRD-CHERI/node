@@ -70,17 +70,15 @@ void MacroAssembler::Ands(const Register& rd, const Register& rn,
 
 void MacroAssembler::Tst(const Register& rn, const Operand& operand) {
   DCHECK(allow_macro_instructions());
-#if defined(__CHERI_PURE_CAPABILITY__)
-  if (rn.IsC() && !operand.IsImmediate() && operand.reg().IsC()) {
-    LogicalMacro(AppropriateZeroRegFor(rn.X()), rn.X(),
-                 Operand(operand.reg().X()), ANDS);
-    return;
-  } else if (rn.IsC()) {
-    LogicalMacro(AppropriateZeroRegFor(rn.X()), rn.X(), operand, ANDS);
-    return;
-  }
-#endif // __CHERI_PURE_CAPABILITY__
-  LogicalMacro(AppropriateZeroRegFor(rn), rn, operand, ANDS);
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rn = rn.IsC() ? rn.X() : rn;
+  const Operand& integer_operand = operand.IsC() ? operand.ToX() : operand;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rn = rn;
+  const Operand& integer_operand = operand;
+#endif  // __CHERI_PURE_CAPABILITY__
+  LogicalMacro(AppropriateZeroRegFor(integer_rn), integer_rn, integer_operand,
+               ANDS);
 }
 
 void MacroAssembler::Bic(const Register& rd, const Register& rn,
@@ -109,7 +107,7 @@ void MacroAssembler::Orr(const Register& rd, const Register& rn,
                          const Operand& operand) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
-#if defined(__CHERI_PURE_CAPABILITY__)
+#ifdef __CHERI_PURE_CAPABILITY__
   if (rn.IsC()) {
     DCHECK(rd.IsC());
     if (AreAliased(rn, rd) || rd.IsSP()) {
@@ -165,10 +163,18 @@ void MacroAssembler::Eon(const Register& rd, const Register& rn,
 void MacroAssembler::Ccmp(const Register& rn, const Operand& operand,
                           StatusFlags nzcv, Condition cond) {
   DCHECK(allow_macro_instructions());
-  if (operand.IsImmediate() && (operand.ImmediateValue() < 0)) {
-    ConditionalCompareMacro(rn, -operand.ImmediateValue(), nzcv, cond, CCMN);
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rn = rn.IsC() ? rn.X() : rn;
+  const Operand& integer_operand = operand.IsC() ? operand.ToX() : operand;
+#else   // __CHERI_PURE_CAPABILITY__
+  const Register& integer_rn = rn;
+  const Operand& integer_operand = operand;
+#endif  // __CHERI_PURE_CAPABILITY__
+  if (integer_operand.IsImmediate() && (integer_operand.ImmediateValue() < 0)) {
+    ConditionalCompareMacro(integer_rn, -integer_operand.ImmediateValue(), nzcv,
+                            cond, CCMN);
   } else {
-    ConditionalCompareMacro(rn, operand, nzcv, cond, CCMP);
+    ConditionalCompareMacro(integer_rn, integer_operand, nzcv, cond, CCMP);
   }
 }
 
@@ -184,10 +190,18 @@ void MacroAssembler::CcmpTagged(const Register& rn, const Operand& operand,
 void MacroAssembler::Ccmn(const Register& rn, const Operand& operand,
                           StatusFlags nzcv, Condition cond) {
   DCHECK(allow_macro_instructions());
-  if (operand.IsImmediate() && (operand.ImmediateValue() < 0)) {
-    ConditionalCompareMacro(rn, -operand.ImmediateValue(), nzcv, cond, CCMP);
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rn = rn.IsC() ? rn.X() : rn;
+  const Operand& integer_operand = operand.IsC() ? operand.ToX() : operand;
+#else   // __CHERI_PURE_CAPABILITY__
+  const Register& integer_rn = rn;
+  const Operand& integer_operand = operand;
+#endif  // __CHERI_PURE_CAPABILITY__
+  if (integer_operand.IsImmediate() && (integer_operand.ImmediateValue() < 0)) {
+    ConditionalCompareMacro(integer_rn, -integer_operand.ImmediateValue(), nzcv,
+                            cond, CCMP);
   } else {
-    ConditionalCompareMacro(rn, operand, nzcv, cond, CCMN);
+    ConditionalCompareMacro(integer_rn, integer_operand, nzcv, cond, CCMN);
   }
 }
 
@@ -349,34 +363,38 @@ void MacroAssembler::Sub(const Register& rd, const Register& rn,
 void MacroAssembler::Subs(const Register& rd, const Register& rn,
                           const Operand& operand) {
   DCHECK(allow_macro_instructions());
-  if (operand.IsImmediate() && (operand.ImmediateValue() < 0) &&
-      IsImmAddSub(-operand.ImmediateValue())) {
-    AddSubMacro(rd, rn, -operand.ImmediateValue(), SetFlags, ADD);
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd.IsC() ? rd.X() : rd;
+  const Register& integer_rn = rn.IsC() ? rn.X() : rn;
+  const Operand& integer_operand = operand.IsC() ? operand.ToX() : operand;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd;
+  const Register& integer_rn = rn;
+  const Operand& integer_operand = operand;
+#endif  // __CHERI_PURE_CAPABILITY__
+  if (integer_operand.IsImmediate() && (integer_operand.ImmediateValue() < 0) &&
+      IsImmAddSub(-integer_operand.ImmediateValue())) {
+    AddSubMacro(integer_rd, integer_rn, -integer_operand.ImmediateValue(),
+                SetFlags, ADD);
   } else {
-    AddSubMacro(rd, rn, operand, SetFlags, SUB);
+    AddSubMacro(integer_rd, integer_rn, integer_operand, SetFlags, SUB);
   }
 }
 
 void MacroAssembler::Cmn(const Register& rn, const Operand& operand) {
   DCHECK(allow_macro_instructions());
-  Adds(AppropriateZeroRegFor(rn), rn, operand);
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rn = rn.IsC() ? rn.X() : rn;
+  const Operand& integer_operand = operand.IsC() ? operand.ToX() : operand;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rn = rn;
+  const Operand& integer_operand = operand;
+#endif  // __CHERI_PURE_CAPABILITY__
+  Adds(AppropriateZeroRegFor(rn), integer_rn, integer_operand);
 }
 
 void MacroAssembler::Cmp(const Register& rn, const Operand& operand) {
   DCHECK(allow_macro_instructions());
-#if defined(__CHERI_PURE_CAPABILITY__)
-  if (rn.IsC()) {
-    if (operand.IsImmediate() || !operand.reg().IsC() ||
-        operand.IsShiftedRegister()) {
-      Subs(xzr, rn.X(), operand.ToX());
-      return;
-    } else {
-      DCHECK(operand.IsExtendedRegister());
-      Subs(xzr, rn.X(), operand.ToX());
-    }
-    return;
-  }
-#endif // __CHERI_PURE_CAPABILITY__
   Subs(AppropriateZeroRegFor(rn), rn, operand);
 }
 
@@ -399,10 +417,17 @@ void MacroAssembler::CmpTagged(const Register& rn, const Operand& operand) {
 void MacroAssembler::Neg(const Register& rd, const Operand& operand) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
-  if (operand.IsImmediate()) {
-    Mov(rd, -operand.ImmediateValue());
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd.IsC() ? rd.X() : rd;
+  const Operand& integer_operand = operand.IsC() ? operand.ToX() : operand;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd;
+  const Operand& integer_operand = operand;
+#endif  // __CHERI_PURE_CAPABILITY__
+  if (integer_operand.IsImmediate()) {
+    Mov(integer_rd, -integer_operand.ImmediateValue());
   } else {
-    Sub(rd, AppropriateZeroRegFor(rd), operand);
+    Sub(integer_rd, AppropriateZeroRegFor(integer_rd), integer_operand);
   }
 }
 
@@ -415,28 +440,66 @@ void MacroAssembler::Adc(const Register& rd, const Register& rn,
                          const Operand& operand) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
-  AddSubWithCarryMacro(rd, rn, operand, LeaveFlags, ADC);
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd.IsC() ? rd.X() : rd;
+  const Register& integer_rn = rn.IsC() ? rn.X() : rn;
+  const Operand& integer_operand = operand.IsC() ? operand.ToX() : operand;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd;
+  const Register& integer_rn = rn;
+  const Operand& integer_operand = operand;
+#endif  // __CHERI_PURE_CAPABILITY__
+  AddSubWithCarryMacro(integer_rd, integer_rn, integer_operand, LeaveFlags,
+                       ADC);
 }
 
 void MacroAssembler::Adcs(const Register& rd, const Register& rn,
                           const Operand& operand) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
-  AddSubWithCarryMacro(rd, rn, operand, SetFlags, ADC);
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd.IsC() ? rd.X() : rd;
+  const Register& integer_rn = rn.IsC() ? rn.X() : rn;
+  const Operand& integer_operand = operand.IsC() ? operand.ToX() : operand;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd;
+  const Register& integer_rn = rn;
+  const Operand& integer_operand = operand;
+#endif  // __CHERI_PURE_CAPABILITY__
+  AddSubWithCarryMacro(integer_rd, integer_rn, integer_operand, SetFlags, ADC);
 }
 
 void MacroAssembler::Sbc(const Register& rd, const Register& rn,
                          const Operand& operand) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
-  AddSubWithCarryMacro(rd, rn, operand, LeaveFlags, SBC);
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd.IsC() ? rd.X() : rd;
+  const Register& integer_rn = rn.IsC() ? rn.X() : rn;
+  const Operand& integer_operand = operand.IsC() ? operand.ToX() : operand;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd;
+  const Register& integer_rn = rn;
+  const Operand& integer_operand = operand;
+#endif  // __CHERI_PURE_CAPABILITY__
+  AddSubWithCarryMacro(integer_rd, integer_rn, integer_operand, LeaveFlags,
+                       SBC);
 }
 
 void MacroAssembler::Sbcs(const Register& rd, const Register& rn,
                           const Operand& operand) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
-  AddSubWithCarryMacro(rd, rn, operand, SetFlags, SBC);
+#ifdef __CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd.IsC() ? rd.X() : rd;
+  const Register& integer_rn = rn.IsC() ? rn.X() : rn;
+  const Operand& integer_operand = operand.IsC() ? operand.ToX() : operand;
+#else   // !__CHERI_PURE_CAPABILITY__
+  const Register& integer_rd = rd;
+  const Register& integer_rn = rn;
+  const Operand& integer_operand = operand;
+#endif  // __CHERI_PURE_CAPABILITY__
+  AddSubWithCarryMacro(integer_rd, integer_rn, integer_operand, SetFlags, SBC);
 }
 
 void MacroAssembler::Ngc(const Register& rd, const Operand& operand) {
@@ -553,6 +616,10 @@ DEFINE_SWP_FUNCTION(Swpa_C, swp_c)
 
 void MacroAssembler::Asr(const Register& rd, const Register& rn,
                          unsigned shift) {
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   asr(rd, rn, shift);
@@ -560,6 +627,11 @@ void MacroAssembler::Asr(const Register& rd, const Register& rn,
 
 void MacroAssembler::Asr(const Register& rd, const Register& rn,
                          const Register& rm) {
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   asrv(rd, rn, rm);
@@ -578,6 +650,10 @@ void MacroAssembler::B(Condition cond, Label* label) {
 
 void MacroAssembler::Bfi(const Register& rd, const Register& rn, unsigned lsb,
                          unsigned width) {
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   bfi(rd, rn, lsb, width);
@@ -585,6 +661,10 @@ void MacroAssembler::Bfi(const Register& rd, const Register& rn, unsigned lsb,
 
 void MacroAssembler::Bfxil(const Register& rd, const Register& rn, unsigned lsb,
                            unsigned width) {
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   bfxil(rd, rn, lsb, width);
@@ -665,12 +745,18 @@ void MacroAssembler::Bl(Label* label) {
 void MacroAssembler::Blr(const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rn.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   blr(rn);
 }
 
 void MacroAssembler::Br(const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rn.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   br(rn);
 }
 
@@ -684,6 +770,10 @@ void MacroAssembler::Cinc(const Register& rd, const Register& rn,
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   DCHECK((cond != al) && (cond != nv));
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   cinc(rd, rn, cond);
 }
 
@@ -692,18 +782,30 @@ void MacroAssembler::Cinv(const Register& rd, const Register& rn,
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   DCHECK((cond != al) && (cond != nv));
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   cinv(rd, rn, cond);
 }
 
 void MacroAssembler::Cls(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   cls(rd, rn);
 }
 
 void MacroAssembler::Clz(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   clz(rd, rn);
 }
 
@@ -712,6 +814,10 @@ void MacroAssembler::Cneg(const Register& rd, const Register& rn,
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   DCHECK((cond != al) && (cond != nv));
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   cneg(rd, rn, cond);
 }
 
@@ -746,6 +852,9 @@ void MacroAssembler::Cset(const Register& rd, Condition cond) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   DCHECK((cond != al) && (cond != nv));
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   cset(rd, cond);
 }
 
@@ -753,6 +862,9 @@ void MacroAssembler::Csetm(const Register& rd, Condition cond) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   DCHECK((cond != al) && (cond != nv));
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   csetm(rd, cond);
 }
 
@@ -761,6 +873,11 @@ void MacroAssembler::Csinc(const Register& rd, const Register& rn,
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   DCHECK((cond != al) && (cond != nv));
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   csinc(rd, rn, rm, cond);
 }
 
@@ -769,6 +886,11 @@ void MacroAssembler::Csinv(const Register& rd, const Register& rn,
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   DCHECK((cond != al) && (cond != nv));
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   csinv(rd, rn, rm, cond);
 }
 
@@ -777,6 +899,11 @@ void MacroAssembler::Csneg(const Register& rd, const Register& rn,
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
   DCHECK((cond != al) && (cond != nv));
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   csneg(rd, rn, rm, cond);
 }
 
@@ -799,6 +926,11 @@ void MacroAssembler::Extr(const Register& rd, const Register& rn,
                           const Register& rm, unsigned lsb) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   extr(rd, rn, rm, lsb);
 }
 
@@ -861,30 +993,45 @@ void MacroAssembler::Fcvt(const VRegister& fd, const VRegister& fn) {
 void MacroAssembler::Fcvtas(const Register& rd, const VRegister& fn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   fcvtas(rd, fn);
 }
 
 void MacroAssembler::Fcvtau(const Register& rd, const VRegister& fn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   fcvtau(rd, fn);
 }
 
 void MacroAssembler::Fcvtms(const Register& rd, const VRegister& fn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   fcvtms(rd, fn);
 }
 
 void MacroAssembler::Fcvtmu(const Register& rd, const VRegister& fn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   fcvtmu(rd, fn);
 }
 
 void MacroAssembler::Fcvtns(const Register& rd, const VRegister& fn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   fcvtns(rd, fn);
 }
 
@@ -897,6 +1044,9 @@ void MacroAssembler::Fcvtnu(const Register& rd, const VRegister& fn) {
 void MacroAssembler::Fcvtzs(const Register& rd, const VRegister& fn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   fcvtzs(rd, fn);
 }
 void MacroAssembler::Fcvtzu(const Register& rd, const VRegister& fn) {
@@ -1118,6 +1268,12 @@ void MacroAssembler::Madd(const Register& rd, const Register& rn,
                           const Register& rm, const Register& ra) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+  DCHECK(!ra.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   madd(rd, rn, rm, ra);
 }
 
@@ -1125,12 +1281,20 @@ void MacroAssembler::Mneg(const Register& rd, const Register& rn,
                           const Register& rm) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   mneg(rd, rn, rm);
 }
 
 void MacroAssembler::Movk(const Register& rd, uint64_t imm, int shift) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   movk(rd, imm, shift);
 }
 
@@ -1149,6 +1313,12 @@ void MacroAssembler::Msub(const Register& rd, const Register& rn,
                           const Register& rm, const Register& ra) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+  DCHECK(!ra.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   msub(rd, rn, rm, ra);
 }
 
@@ -1156,12 +1326,21 @@ void MacroAssembler::Mul(const Register& rd, const Register& rn,
                          const Register& rm) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   mul(rd, rn, rm);
 }
 
 void MacroAssembler::Rbit(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   rbit(rd, rn);
 }
 
@@ -1175,18 +1354,30 @@ void MacroAssembler::Ret(const Register& rn) {
 void MacroAssembler::Rev(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   rev(rd, rn);
 }
 
 void MacroAssembler::Rev16(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   rev16(rd, rn);
 }
 
 void MacroAssembler::Rev32(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   rev32(rd, rn);
 }
 
@@ -1194,6 +1385,10 @@ void MacroAssembler::Ror(const Register& rd, const Register& rs,
                          unsigned shift) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rs.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   ror(rd, rs, shift);
 }
 
@@ -1201,6 +1396,10 @@ void MacroAssembler::Ror(const Register& rd, const Register& rn,
                          const Register& rm) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   rorv(rd, rn, rm);
 }
 
@@ -1208,6 +1407,10 @@ void MacroAssembler::Sbfx(const Register& rd, const Register& rn, unsigned lsb,
                           unsigned width) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   sbfx(rd, rn, lsb, width);
 }
 
@@ -1221,6 +1424,11 @@ void MacroAssembler::Sdiv(const Register& rd, const Register& rn,
                           const Register& rm) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   sdiv(rd, rn, rm);
 }
 
@@ -1228,6 +1436,12 @@ void MacroAssembler::Smaddl(const Register& rd, const Register& rn,
                             const Register& rm, const Register& ra) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+  DCHECK(!ra.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   smaddl(rd, rn, rm, ra);
 }
 
@@ -1235,6 +1449,12 @@ void MacroAssembler::Smsubl(const Register& rd, const Register& rn,
                             const Register& rm, const Register& ra) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+  DCHECK(!ra.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   smsubl(rd, rn, rm, ra);
 }
 
@@ -1242,6 +1462,11 @@ void MacroAssembler::Smull(const Register& rd, const Register& rn,
                            const Register& rm) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   smull(rd, rn, rm);
 }
 
@@ -1249,6 +1474,11 @@ void MacroAssembler::Smulh(const Register& rd, const Register& rn,
                            const Register& rm) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   smulh(rd, rn, rm);
 }
 
@@ -1256,6 +1486,11 @@ void MacroAssembler::Umull(const Register& rd, const Register& rn,
                            const Register& rm) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   umaddl(rd, rn, rm, xzr);
 }
 
@@ -1263,24 +1498,41 @@ void MacroAssembler::Umulh(const Register& rd, const Register& rn,
                            const Register& rm) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   umulh(rd, rn, rm);
 }
 
 void MacroAssembler::Sxtb(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   sxtb(rd, rn);
 }
 
 void MacroAssembler::Sxth(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   sxth(rd, rn);
 }
 
 void MacroAssembler::Sxtw(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   sxtw(rd, rn);
 }
 
@@ -1288,6 +1540,10 @@ void MacroAssembler::Ubfiz(const Register& rd, const Register& rn, unsigned lsb,
                            unsigned width) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   ubfiz(rd, rn, lsb, width);
 }
 
@@ -1295,6 +1551,10 @@ void MacroAssembler::Sbfiz(const Register& rd, const Register& rn, unsigned lsb,
                            unsigned width) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   sbfiz(rd, rn, lsb, width);
 }
 
@@ -1302,12 +1562,19 @@ void MacroAssembler::Ubfx(const Register& rd, const Register& rn, unsigned lsb,
                           unsigned width) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   ubfx(rd, rn, lsb, width);
 }
 
 void MacroAssembler::Ucvtf(const VRegister& fd, const Register& rn,
                            unsigned fbits) {
   DCHECK(allow_macro_instructions());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   ucvtf(fd, rn, fbits);
 }
 
@@ -1315,6 +1582,11 @@ void MacroAssembler::Udiv(const Register& rd, const Register& rn,
                           const Register& rm) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   udiv(rd, rn, rm);
 }
 
@@ -1322,6 +1594,12 @@ void MacroAssembler::Umaddl(const Register& rd, const Register& rn,
                             const Register& rm, const Register& ra) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+  DCHECK(!ra.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   umaddl(rd, rn, rm, ra);
 }
 
@@ -1329,24 +1607,42 @@ void MacroAssembler::Umsubl(const Register& rd, const Register& rn,
                             const Register& rm, const Register& ra) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+  DCHECK(!rm.IsC());
+  DCHECK(!ra.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   umsubl(rd, rn, rm, ra);
 }
 
 void MacroAssembler::Uxtb(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   uxtb(rd, rn);
 }
 
 void MacroAssembler::Uxth(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   uxth(rd, rn);
 }
 
 void MacroAssembler::Uxtw(const Register& rd, const Register& rn) {
   DCHECK(allow_macro_instructions());
   DCHECK(!rd.IsZero());
+#ifdef __CHERI_PURE_CAPABILITY__
+  DCHECK(!rd.IsC());
+  DCHECK(!rn.IsC());
+#endif  // __CHERI_PURE_CAPABILITY__
   uxtw(rd, rn);
 }
 
