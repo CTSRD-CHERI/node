@@ -1,0 +1,97 @@
+diff --git a/deps/v8/BUILD.gn b/deps/v8/BUILD.gn
+index 4b39fbb8cd0..b063d42daed 100644
+--- a/deps/v8/BUILD.gn
++++ b/deps/v8/BUILD.gn
+@@ -2254,6 +2254,10 @@ template("run_mksnapshot") {
+       rebase_path("$target_gen_dir/embedded${suffix}.S", root_build_dir),
+     ]
+
++    if (v8_cheri_debug) {
++      args += [ "--serializer-trace-bytes" ]
++    }
++
+     if (v8_log_builtins_block_count_input != "") {
+       args += [
+         "--trace-turbo",
+diff --git a/deps/v8/src/flags/flag-definitions.h b/deps/v8/src/flags/flag-definitions.h
+index 3a3e3999b05..6d7cd3fe1e9 100644
+--- a/deps/v8/src/flags/flag-definitions.h
++++ b/deps/v8/src/flags/flag-definitions.h
+@@ -2140,6 +2140,7 @@ DEFINE_BOOL(freeze_flags_after_init, true,
+ #endif  // defined(V8_OS_AIX) && defined(COMPONENT_BUILD)
+
+ // mksnapshot.cc
++DEFINE_BOOL(serializer_trace_bytes, false, "Print raw serialization content.")
+ DEFINE_STRING(embedded_src, nullptr,
+               "Path for the generated embedded data file. (mksnapshot only)")
+ DEFINE_STRING(
+diff --git a/deps/v8/src/snapshot/serializer.cc b/deps/v8/src/snapshot/serializer.cc
+index c425435e147..6b374dd4258 100644
+--- a/deps/v8/src/snapshot/serializer.cc
++++ b/deps/v8/src/snapshot/serializer.cc
+@@ -444,6 +444,14 @@ InstructionStream Serializer::CopyCode(InstructionStream istream) {
+
+ void Serializer::ObjectSerializer::SerializePrologue(SnapshotSpace space,
+                                                      int size, Map map) {
++#define PRINT_INSTANCE_TYPE(Name)                                           \
++  if (map.instance_type() == Name) {                                        \
++    PrintF("Serialize instance type: %s\n", #Name);                         \
++  }
++  if (v8_flags.serializer_trace_bytes) {
++    INSTANCE_TYPE_LIST(PRINT_INSTANCE_TYPE)
++  }
++#undef PRINT_INSTANCE_TYPE
+   if (serializer_->code_address_map_) {
+     const char* code_name =
+         serializer_->code_address_map_->Lookup(object_->address());
+
+diff --git a/deps/v8/src/snapshot/snapshot-source-sink.cc b/deps/v8/src/snapshot/snapshot-source-sink.cc
+index 26ab0c9103e..34549841b5b 100644
+--- a/deps/v8/src/snapshot/snapshot-source-sink.cc
++++ b/deps/v8/src/snapshot/snapshot-source-sink.cc
+@@ -15,6 +15,9 @@ namespace internal {
+
+ void SnapshotByteSink::PutN(int number_of_bytes, const uint8_t v,
+                             const char* description) {
++  if (v8_flags.serializer_trace_bytes) {
++    PrintF("  %s: %d bytes", description, number_of_bytes);
++  }
+   data_.insert(data_.end(), number_of_bytes, v);
+ }
+
+@@ -39,6 +42,9 @@ void SnapshotByteSink::PutInt(uintptr_t integer, const char* description) {
+
+ void SnapshotByteSink::PutRaw(const uint8_t* data, int number_of_bytes,
+                               const char* description) {
++  if (v8_flags.serializer_trace_bytes) {
++    PrintF("  %s: %d bytes", description, number_of_bytes);
++  }
+   data_.insert(data_.end(), data, data + number_of_bytes);
+ }
+
+diff --git a/deps/v8/src/snapshot/snapshot-source-sink.h b/deps/v8/src/snapshot/snapshot-source-sink.h
+index 7bcc3658b54..d4843dd2c5e 100644
+--- a/deps/v8/src/snapshot/snapshot-source-sink.h
++++ b/deps/v8/src/snapshot/snapshot-source-sink.h
+@@ -12,6 +12,7 @@
+ #include "src/base/logging.h"
+ #include "src/common/globals.h"
+ #include "src/utils/utils.h"
++#include "src/flags/flags.h"
+
+ namespace v8 {
+ namespace internal {
+@@ -120,7 +121,12 @@ class SnapshotByteSink {
+
+   ~SnapshotByteSink() = default;
+
+-  void Put(uint8_t b, const char* description) { data_.push_back(b); }
++  void Put(uint8_t b, const char* description) {
++    if (v8_flags.serializer_trace_bytes) {
++      PrintF("  %s: %d bytes", description, b);
++    }
++    data_.push_back(b);
++  }
+
+   void PutN(int number_of_bytes, const uint8_t v, const char* description);
+   void PutInt(uintptr_t integer, const char* description);

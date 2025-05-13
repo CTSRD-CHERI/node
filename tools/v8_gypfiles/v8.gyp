@@ -388,6 +388,7 @@
           'message': 'generating: >@(_outputs)',
           'variables': {
             'mksnapshot_flags': [
+              '--trace_serializer_bytes',
               '--turbo_instruction_scheduling',
               # In cross builds, the snapshot may be generated for both the host and
               # target toolchains.  The same host binary is used to generate both, so
