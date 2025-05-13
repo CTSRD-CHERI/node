@@ -444,6 +444,19 @@ InstructionStream Serializer::CopyCode(InstructionStream istream) {
 
 void Serializer::ObjectSerializer::SerializePrologue(SnapshotSpace space,
                                                      int size, Map map) {
+#define PRINT_INSTANCE_TYPE(Name)                                   \
+  if (map.instance_type() == Name) {                                \
+    PrintF("Serialize instance type: %s, size: %d\n", #Name, size); \
+    has_type_name = true;                                           \
+  }
+  if (v8_flags.trace_serializer_bytes) {
+    bool has_type_name = false;
+    INSTANCE_TYPE_LIST(PRINT_INSTANCE_TYPE)
+    if (!has_type_name) {
+      PrintF("Serialize instance size: %d\n", size);
+    }
+  }
+#undef PRINT_INSTANCE_TYPE
   if (serializer_->code_address_map_) {
     const char* code_name =
         serializer_->code_address_map_->Lookup(object_->address());
@@ -1150,14 +1163,19 @@ void Serializer::ObjectSerializer::OutputRawData(Address up_to) {
   int to_skip = up_to_offset - bytes_processed_so_far_;
   int bytes_to_output = to_skip;
   bool needs_special_handling = false;
+  bool needs_cheri_padding = false;
 #if defined(__CHERI_PURE_CAPABILITY__) && !defined(V8_COMPRESS_POINTERS)
   int tagged_to_output;
   if (bytes_to_output < kTaggedSize && bytes_to_output != 0) {
     needs_special_handling = true;
     tagged_to_output = 1;
   } else {
-    DCHECK(IsAligned(bytes_to_output, kTaggedSize));
-    tagged_to_output = bytes_to_output / kTaggedSize;
+    if (!IsAligned(bytes_to_output, kTaggedSize)) {
+      needs_cheri_padding = true;
+      tagged_to_output = bytes_to_output / kTaggedSize + 1;
+    } else {
+      tagged_to_output = bytes_to_output / kTaggedSize;
+    }
   }
 #else
   DCHECK(IsAligned(bytes_to_output, kTaggedSize));
@@ -1231,6 +1249,11 @@ void Serializer::ObjectSerializer::OutputRawData(Address up_to) {
         sink_->PutRaw(reinterpret_cast<uint8_t*>(object_start + base),
                       bytes_to_output, "Bytes");
       }
+    }
+    if (needs_cheri_padding) {
+      DCHECK_NE(needs_special_handling, true);
+      int padding = bytes_to_output - bytes_to_output % kTaggedSize;
+      sink_->PutN(padding, kNop, "CheriPadding");
     }
   }
 }
