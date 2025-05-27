@@ -1203,7 +1203,14 @@ void InstructionSelector::VisitSimd128ReverseBytes(Node* node) {
 }
 
 // Architecture supports unaligned access, therefore VisitLoad is used instead
+#ifdef __CHERI_PURE_CAPABILITY__
+void InstructionSelector::VisitUnalignedLoad(Node* node) {
+  // FIXME(ds815): Potentially add some extra stuff here for debugging.
+  VisitLoad(node);
+}
+#else   // !__CHERI_PURE_CAPABILITY__
 void InstructionSelector::VisitUnalignedLoad(Node* node) { UNREACHABLE(); }
+#endif  // __CHERI_PURE_CAPABILITY__
 
 // Architecture supports unaligned access, therefore VisitStore is used instead
 void InstructionSelector::VisitUnalignedStore(Node* node) { UNREACHABLE(); }
@@ -4862,8 +4869,20 @@ InstructionSelector::SupportedMachineOperatorFlags() {
 // static
 MachineOperatorBuilder::AlignmentRequirements
 InstructionSelector::AlignmentRequirements() {
+#ifdef __CHERI_PURE_CAPABILITY__
+  base::EnumSet<MachineRepresentation> req_aligned;
+  req_aligned.Add(MachineRepresentation::kCapability64);
+#ifndef V8_COMPRESS_POINTERS
+  req_aligned.Add(MachineRepresentation::kTaggedPointer);
+  req_aligned.Add(MachineRepresentation::kTagged);
+  req_aligned.Add(MachineRepresentation::kMapWord);
+#endif  // !V8_COMPRESS_POINTERS
+  return MachineOperatorBuilder::AlignmentRequirements::
+      SomeUnalignedAccessUnsupported(req_aligned, req_aligned);
+#else   // !__CHERI_PURE_CAPABILITY__
   return MachineOperatorBuilder::AlignmentRequirements::
       FullUnalignedAccessSupport();
+#endif  // __CHERI_PURE_CAPABILITY__
 }
 
 }  // namespace compiler
