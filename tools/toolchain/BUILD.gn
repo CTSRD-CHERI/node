@@ -47,3 +47,26 @@ gcc_toolchain("mips64el-bundled") {
     is_clang = false
   }
 }
+
+gcc_toolchain("morello-buildroot") {
+  toolprefix = "$clang_base_path/bin"
+  cc = "${toolprefix}/clang"
+  cxx = "${toolprefix}/clang++"
+
+  readelf = "${toolprefix}/llvm-readelf"
+  nm = "${toolprefix}/llvm-nm"
+  ar = "${toolprefix}/llvm-ar"
+  ld = cxx
+
+  extra_cxxflags = "-mabi=purecap -march=morello -Xclang -morello-vararg=new -Xclang -morello-bounded-memargs -cheri-codeptr-relocs"
+  extra_cflags = "-mabi=purecap -march=morello -Xclang -morello-vararg=new -Xclang -morello-bounded-memargs -cheri-codeptr-relocs"
+  extra_ldflags = "-mabi=purecap -cheri-codeptr-relocs"
+  extra_asmflags = "-mabi=purecap -march=morello"
+
+  toolchain_args = {
+    current_cpu = "arm64"
+    current_os = "freebsd"
+    is_clang = true
+  }
+}
+

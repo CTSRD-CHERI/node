@@ -33,7 +33,7 @@
   V(Throw)                 \
   V(End)
 
-#if defined(__CHERI_PURE_CAPABILITY__)
+#if V8_TARGET_CHERI
 #define MACHINE_LEVEL_CONSTANT_OP_LIST(V) \
   V(Int32Constant)                        \
   V(Int64Constant)                        \
@@ -727,7 +727,7 @@
   V(Float64Mod)                       \
   V(Float64Pow)
 
-#ifdef __CHERI_PURE_CAPABILITY__
+#if V8_TARGET_CHERI
 #define MACHINE_CAPABILITY_ATOMIC_OP_LIST(V) \
   V(CapabilityAtomicLoad)                    \
   V(CapabilityAtomicStore)                   \
@@ -740,9 +740,9 @@
   V(CapabilityAtomicXor)                     \
   V(CapabilityAtomicPairExchange)            \
   V(CapabilityAtomicPairCompareExchange)
-#else  // !__CHERI_PURE_CAPABILITY__
+#else
 #define MACHINE_CAPABILITY_ATOMIC_OP_LIST(V)
-#endif  // __CHERI_PURE_CAPABILITY__
+#endif
 
 #define MACHINE_ATOMIC_OP_LIST(V)    \
   V(Word32AtomicLoad)                \
@@ -1249,26 +1249,22 @@
   MACHINE_SIMD256_OP_LIST(V) \
   JS_OP_LIST(V)
 
-#if defined(__CHERI_PURE_CAPABILITY__)
+#if V8_TARGET_CHERI
 #define PURECAP_OP_LIST(V) \
   V(CapAdd)                \
   V(CapSub)                \
   V(CapabilityIsTagged)    \
   V(AlignU)                \
   V(AlignD)
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#else
+#define PURECAP_OP_LIST(V) V(CapabilityIsTagged)
+#endif
 
 // The combination of all operators at all levels and the common operators.
-#if defined(__CHERI_PURE_CAPABILITY__)
 #define ALL_OP_LIST(V) \
   CONTROL_OP_LIST(V)   \
   VALUE_OP_LIST(V)     \
   PURECAP_OP_LIST(V)
-#else // defined(__CHERI_PURE_CAPABILITY__)
-#define ALL_OP_LIST(V) \
-  CONTROL_OP_LIST(V)   \
-  VALUE_OP_LIST(V)
-#endif // defined(__CHERI_PURE_CAPABILITY__)
 
 namespace v8 {
 namespace internal {

@@ -83,7 +83,7 @@ struct ScheduleBuilder {
   Node* IntPtrConstant(intptr_t value) {
 #ifdef __CHERI_PURE_CAPABILITY__
     DCHECK_EQ(kSystemPointerSize, 16);
-    if (__builtin_cheri_tag_get(value))
+    if (V8_CHERI_TAG_GET(value))
       return AddNode(common.Capability64Constant(value), {});
 #endif  // __CHERI_PURE_CAPABILITY__
     return AddNode(machine.Is64() ? common.Int64Constant(value)
@@ -588,12 +588,12 @@ Node* ScheduleBuilder::ProcessOperation(const FloatUnaryOp& op) {
 Node* ScheduleBuilder::ProcessOperation(const ShiftOp& op) {
   DCHECK(op.rep == WordRepresentation::Word32() ||
          op.rep == WordRepresentation::Word64());
-#ifdef __CHERI_PURE_CAPABILITY__
+#if V8_TARGET_CHERI
   bool word64 = op.rep == WordRepresentation::Word64() ||
                 op.rep == WordRepresentation::Capability64();
-#else   // !__CHERI_PURE_CAPABILITY__
+#else
   bool word64 = op.rep == WordRepresentation::Word64();
-#endif  // __CHERI_PURE_CAPABILITY__
+#endif
   const Operator* o;
   switch (op.kind) {
     case ShiftOp::Kind::kShiftRightArithmeticShiftOutZeros:

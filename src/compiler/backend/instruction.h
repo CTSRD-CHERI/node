@@ -94,9 +94,7 @@ class V8_EXPORT_PRIVATE INSTRUCTION_OPERAND_ALIGN InstructionOperand {
   inline bool IsDoubleRegister() const;
   inline bool IsSimd128Register() const;
   inline bool IsSimd256Register() const;
-#if defined(__CHERI_PURE_CAPABILITY__)
   inline bool IsCapabilityRegister() const;
-#endif // defined(__CHERI_PURE_CAPABILITY__)
   inline bool IsAnyStackSlot() const;
   inline bool IsStackSlot() const;
   inline bool IsFPStackSlot() const;
@@ -104,9 +102,7 @@ class V8_EXPORT_PRIVATE INSTRUCTION_OPERAND_ALIGN InstructionOperand {
   inline bool IsDoubleStackSlot() const;
   inline bool IsSimd128StackSlot() const;
   inline bool IsSimd256StackSlot() const;
-#if defined(__CHERI_PURE_CAPABILITY__)
   inline bool IsCapabilityStackSlot() const;
-#endif // defined(__CHERI_PURE_CAPABILITY__)
 
   template <typename SubKindOperand>
   static SubKindOperand* New(Zone* zone, const SubKindOperand& op) {
@@ -442,9 +438,9 @@ class ImmediateOperand : public InstructionOperand {
   enum ImmediateType {
     INLINE_INT32,
     INLINE_INT64,
-#ifdef __CHERI_PURE_CAPABILITY__
+#if V8_TARGET_CHERI
     INLINE_INTPTR,
-#endif  // __CHERI_PURE_CAPABILITY__
+#endif
     INDEXED_RPO,
     INDEXED_IMM
   };
@@ -482,12 +478,16 @@ class ImmediateOperand : public InstructionOperand {
     return static_cast<int64_t>(value_) >> ValueField::kShift;
   }
 
+#if V8_TARGET_CHERI
 #ifdef __CHERI_PURE_CAPABILITY__
   intptr_t inline_intptr_value() const {
     DCHECK_EQ(INLINE_INTPTR, type());
     return value_intptr_;
   }
+#else   // !__CHERI_PURE_CAPABILITY__
+  int64_t inline_intptr_value() const { return inline_int64_value(); }
 #endif  // __CHERI_PURE_CAPABILITY__
+#endif
 
   int32_t indexed_value() const {
     DCHECK(type() == INDEXED_IMM || type() == INDEXED_RPO);
@@ -500,7 +500,11 @@ class ImmediateOperand : public InstructionOperand {
 
   INSTRUCTION_OPERAND_CASTS(ImmediateOperand, IMMEDIATE)
 
+#if V8_TARGET_CHERI
   using TypeField = KindField::Next<ImmediateType, 3>;
+#else
+  using TypeField = KindField::Next<ImmediateType, 2>;
+#endif
   static_assert(TypeField::kLastUsedBit < 32);
   using ValueField = base::BitField64<int32_t, 32, 32>;
 };
@@ -582,12 +586,10 @@ class LocationOperand : public InstructionOperand {
     return Register::from_code(register_code());
   }
 
-#ifdef __CHERI_PURE_CAPABILITY__
   Register GetCapabilityRegister() const {
     DCHECK(IsRegister());
     return Register::cap_from_code(register_code());
   }
-#endif  // __CHERI_PURE_CAPABILITY__
 
   FloatRegister GetFloatRegister() const {
     DCHECK(IsFloatRegister());
@@ -636,12 +638,12 @@ class LocationOperand : public InstructionOperand {
       case MachineRepresentation::kCompressedPointer:
       case MachineRepresentation::kCompressed:
       case MachineRepresentation::kSandboxedPointer:
-#if defined(__CHERI_PURE_CAPABILITY__)
+#if V8_TARGET_CHERI
         [[fallthrough]];
       case MachineRepresentation::kCapability32:
         [[fallthrough]];
       case MachineRepresentation::kCapability64:
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#endif
         return true;
       case MachineRepresentation::kBit:
       case MachineRepresentation::kWord8:
@@ -742,12 +744,14 @@ bool InstructionOperand::IsSimd256Register() const {
   return IsAnyRegister() && LocationOperand::cast(this)->representation() ==
                                 MachineRepresentation::kSimd256;
 }
-#if defined(__CHERI_PURE_CAPABILITY__)
+#if V8_TARGET_CHERI
 bool InstructionOperand::IsCapabilityRegister() const {
   return IsAnyRegister() &&
          IsCapability(LocationOperand::cast(this)->representation());
 }
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#else
+bool InstructionOperand::IsCapabilityRegister() const { return false; }
+#endif
 
 bool InstructionOperand::IsAnyStackSlot() const {
   return IsAnyLocationOperand() &&
@@ -795,12 +799,14 @@ bool InstructionOperand::IsSimd256StackSlot() const {
          LocationOperand::cast(this)->representation() ==
              MachineRepresentation::kSimd256;
 }
-#if defined(__CHERI_PURE_CAPABILITY__)
+#if V8_TARGET_CHERI
 bool InstructionOperand::IsCapabilityStackSlot() const {
   return IsAnyLocationOperand() &&
-	 IsCapability(LocationOperand::cast(this)->representation());
+         IsCapability(LocationOperand::cast(this)->representation());
 }
-#endif // defined(__CHERI_PURE_CAPABILITY__)
+#else
+bool InstructionOperand::IsCapabilityStackSlot() const { return false; }
+#endif
 
 uint64_t InstructionOperand::GetCanonicalizedValue() const {
   if (IsAnyLocationOperand()) {
@@ -1242,9 +1248,9 @@ class V8_EXPORT_PRIVATE Constant final {
   enum Type {
     kInt32,
     kInt64,
-#if defined(__CHERI_PURE_CAPABILITY__)
+#if V8_TARGET_CHERI
     kIntPtr,
-#endif   // __CHERI_PURE_CAPABILITY__
+#endif
     kFloat32,
     kFloat64,
     kExternalReference,
@@ -1255,7 +1261,7 @@ class V8_EXPORT_PRIVATE Constant final {
 
   explicit Constant(int32_t v);
   explicit Constant(int64_t v) : type_(kInt64), value_(v) {}
-#if defined(__CHERI_PURE_CAPABILITY__)
+#if __CHERI_PURE_CAPABILITY__
   explicit Constant(intptr_t v) : type_(kIntPtr), value_(v) {}
 #endif   // __CHERI_PURE_CAPABILITY__
   explicit Constant(float v)
@@ -1282,14 +1288,14 @@ class V8_EXPORT_PRIVATE Constant final {
   bool FitsInInt32() const {
     if (type() == kInt32) return true;
     DCHECK(type() == kInt64);
-#if defined(__CHERI_PURE_CAPABILITY__)
+#ifdef __CHERI_PURE_CAPABILITY__
     const int64_t value = static_cast<int64_t>(value_);
     return value >= std::numeric_limits<int32_t>::min() &&
            value <= std::numeric_limits<int32_t>::max();
-#else    // __CHERI_PURE_CAPABILITY__
+#else   // !__CHERI_PURE_CAPABILITY__
     return value_ >= std::numeric_limits<int32_t>::min() &&
            value_ <= std::numeric_limits<int32_t>::max();
-#endif   // __CHERI_PURE_CAPABILITY__
+#endif  // __CHERI_PURE_CAPABILITY__
   }
 
   int32_t ToInt32() const {
@@ -1301,21 +1307,26 @@ class V8_EXPORT_PRIVATE Constant final {
 
   int64_t ToInt64() const {
     if (type() == kInt32) return ToInt32();
-#if defined(__CHERI_PURE_CAPABILITY__)
+#if V8_TARGET_CHERI
     DCHECK(kInt64 == type() || kIntPtr == type());
     return static_cast<uint64_t>(value_);
-#else    // __CHERI_PURE_CAPABILITY__
+#else
     DCHECK(kInt64 == type());
     return value_;
-#endif   // __CHERI_PURE_CAPABILITY__
+#endif
   }
 
-#if defined(__CHERI_PURE_CAPABILITY__)
+#if V8_TARGET_CHERI
   intptr_t ToIntPtr() const {
     DCHECK_EQ(kIntPtr, type());
     return value_;
   }
-#endif   // __CHERI_PURE_CAPABILITY__
+#else
+  intptr_t ToIntPtr() const {
+    DCHECK_EQ(kInt64, type());
+    return value_;
+  }
+#endif
 
   float ToFloat32() const {
     // TODO(ahaas): We should remove this function. If value_ has the bit
@@ -1332,20 +1343,22 @@ class V8_EXPORT_PRIVATE Constant final {
 
   base::Double ToFloat64() const {
     DCHECK_EQ(kFloat64, type());
-#if defined(__CHERI_PURE_CAPABILITY__)
+    // XXX(ds815): Why?
+#if V8_TARGET_CHERI
     return base::Double(static_cast<uint64_t>(value_));
-#else    // __CHERI_PURE_CAPABILITY__
+#else
     return base::Double(base::bit_cast<uint64_t>(value_));
-#endif   // __CHERI_PURE_CAPABILITY__
+#endif
   }
 
   ExternalReference ToExternalReference() const {
     DCHECK_EQ(kExternalReference, type());
-#if defined(__CHERI_PURE_CAPABILITY__)
+    // XXX(ds815): Why?
+#if V8_TARGET_CHERI
     return ExternalReference::FromRawAddress(base::bit_cast<Address>(value_));
-#else    // __CHERI_PURE_CAPABILITY__
+#else
     return ExternalReference::FromRawAddress(static_cast<Address>(value_));
-#endif   // __CHERI_PURE_CAPABILITY__
+#endif
   }
 
   RpoNumber ToRpoNumber() const {
@@ -1359,11 +1372,11 @@ class V8_EXPORT_PRIVATE Constant final {
  private:
   Type type_;
   RelocInfo::Mode rmode_ = RelocInfo::NO_INFO;
-#if defined(__CHERI_PURE_CAPABILITY__)
+#if V8_TARGET_CHERI
   intptr_t value_;
-#else   // !__CHERI_PURE_CAPABILITY__
+#else
   int64_t value_;
-#endif  // !__CHERI_PURE_CAPABILITY__
+#endif
 };
 
 std::ostream& operator<<(std::ostream&, const Constant&);
@@ -1962,11 +1975,11 @@ class V8_EXPORT_PRIVATE InstructionSequence final
                  constant.FitsInInt32()) {
         return ImmediateOperand(ImmediateOperand::INLINE_INT64,
                                 constant.ToInt32());
-#ifdef __CHERI_PURE_CAPABILITY__
+#if V8_TARGET_CHERI
       } else if (constant.type() == Constant::kIntPtr) {
         return ImmediateOperand(ImmediateOperand::INLINE_INTPTR,
                                 constant.ToIntPtr());
-#endif  // __CHERI_PURE_CAPABILITY__
+#endif
       }
     }
     int index = static_cast<int>(immediates_.size());
@@ -1980,10 +1993,10 @@ class V8_EXPORT_PRIVATE InstructionSequence final
         return Constant(op->inline_int32_value());
       case ImmediateOperand::INLINE_INT64:
         return Constant(op->inline_int64_value());
-#ifdef __CHERI_PURE_CAPABILITY__
+#if V8_TARGET_CHERI
       case ImmediateOperand::INLINE_INTPTR:
         return Constant(op->inline_intptr_value());
-#endif  // __CHERI_PURE_CAPABILITY__
+#endif
       case ImmediateOperand::INDEXED_RPO: {
         int index = op->indexed_value();
         DCHECK_LE(0, index);
