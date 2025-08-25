@@ -1,5 +1,6 @@
 {
   'variables': {
+    'cheri%': 'false',
     'configuring_node%': 0,
     'asan%': 0,
     'ubsan%': 0,
@@ -336,25 +337,26 @@
     'conditions': [
       ['cheri=="true"', {
         'cflags': [
-	  '-I/usr/include',
-	  '--target=aarch64c-unknown-freebsd',
-	  '-mabi=purecap',
-	  '-march=morello',
-	  '-Xclang',
-	  '-morello-vararg=new',
-	],
-	'cflags_cc': [
-	  '-I/usr/include/c++/v1',
-	  # this gets triggered for unknown reason, so suppress for now
-	  '-Wno-invalid-offsetof',
-	],
+          '-I/usr/include',
+          '--target=aarch64c-unknown-freebsd',
+          '-mabi=purecap',
+          '-march=morello',
+          '-Xclang',
+          '-morello-vararg=new',
+        ],
+        'cflags_cc': [
+          '-I/usr/include/c++/v1',
+          # this gets triggered for unknown reason, so suppress for now
+          '-Wno-invalid-offsetof',
+        ],
         'ldflags': [
           '-mabi=purecap',
         ],
         'asmflags': [
           '-march=morello',
-	  '-mabi=purecap',
+          '-mabi=purecap',
         ],
+        'defines': [ 'V8_TARGET_CHERI' ],
       }],
       [ 'configuring_node', {
         'msvs_configuration_attributes': {

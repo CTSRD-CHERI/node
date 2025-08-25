@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 {
   'variables': {
+    'cheri_abi%': "",
     'V8_ROOT': '../../deps/v8',
     'v8_code': 1,
     'v8_random_seed%': 314159265,
@@ -31,6 +32,9 @@
         'torque_files': [
           '<!@pymod_do_main(GN-scraper "<(V8_ROOT)/BUILD.gn"  "torque_files =.*?v8_enable_webassembly.*?torque_files \\+= ")',
         ],
+      }],
+      ['cheri=="true"', {
+        'cheri_abi': '-cheriabi',
       }],
     ],
   },
@@ -115,6 +119,7 @@
             '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)torque<(EXECUTABLE_SUFFIX)',
             '-o', '<(SHARED_INTERMEDIATE_DIR)/torque-generated',
             '-v8-root', '<(V8_ROOT)',
+            '<(cheri_abi)',
             '<@(torque_files_without_v8_root)',
           ],
         },

@@ -93,11 +93,29 @@ parser.add_argument('--coverage',
     default=None,
     help='Build node with code coverage enabled')
 
+parser.add_argument('--morello',
+    action='store_true',
+    dest='morello',
+    default=None,
+    help='compile with Morello')
+
 parser.add_argument('--cheri',
     action='store_true',
     dest='cheri',
     default=None,
     help='compile with cheri')
+
+parser.add_argument('--compiler-base-path',
+    action='store',
+    dest='compiler_base_path',
+    default=None,
+    help='compiler base path')
+
+parser.add_argument('--distcc',
+    action='store_true',
+    dest='distcc',
+    default=None,
+    help='compile with distcc and ccache')
 
 parser.add_argument('--debug',
     action='store_true',
@@ -951,12 +969,32 @@ parser.add_argument('-C',
 
 (options, args) = parser.parse_known_args()
 
-if options.cheri:
-  CC = 'env CCACHE_PREFIX=distcc CCACHE_SLOPPINESS=time_macros ccache /usr/local64/bin/clang'
-  CXX = 'env CCACHE_PREFIX=distcc CCACHE_SLOPPINESS=time_macros ccache /usr/local64/bin/clang++'
-  options.dest_os = 'freebsd'
+if options.morello:
+  options.cheri = True
   options.dest_cpu = 'arm64'
+  # These shared lib are needed to build for now
+  options.shared_openssl = True
+  options.shared_zlib = True
+  options.shared_libuv = True
+  options.with_intl = 'system-icu'
+  options.shared_nghttp2 = True
+  # Enable ninja
+  options.use_ninja = True
+  options.compiler_base_path = '/usr/local64/bin'
+  # options.compiler_base_path = '/usr/local64/llvm-morello-c18n/bin'
 
+if options.cheri:
+  options.dest_os = 'freebsd'
+  CC = 'clang'
+  CXX = 'clang++'
+
+if options.compiler_base_path:
+  CC = str(Path(options.compiler_base_path, CC))
+  CXX = str(Path(options.compiler_base_path, CXX))
+
+if options.distcc:
+  CC = 'env CCACHE_PREFIX=distcc CCACHE_SLOPPINESS=time_macros ccache ' + CC
+  CXX = 'env CCACHE_PREFIX=distcc CCACHE_SLOPPINESS=time_macros ccache ' + CXX
 # Expand ~ in the install prefix now, it gets written to multiple files.
 options.prefix = str(Path(options.prefix or '').expanduser())
 
@@ -1600,7 +1638,8 @@ def configure_library(lib, output, pkgname=None):
 def configure_v8(o):
   o['variables']['v8_enable_webassembly'] = 0 if options.v8_lite_mode else 1
   if options.cheri:
-      o['variables']['v8_enable_webassembly'] = 0
+    # Disable wasm for now
+    o['variables']['v8_enable_webassembly'] = 0
   o['variables']['v8_enable_javascript_promise_hooks'] = 1
   o['variables']['v8_enable_lite_mode'] = 1 if options.v8_lite_mode else 0
   o['variables']['v8_enable_gdbjit'] = 1 if options.gdb else 0
