@@ -33,7 +33,7 @@
           '<!@pymod_do_main(GN-scraper "<(V8_ROOT)/BUILD.gn"  "torque_files =.*?v8_enable_webassembly.*?torque_files \\+= ")',
         ],
       }],
-      ['cheri=="true"', {
+      ['cheri=="true" and target_arch==host_arch', {
         'cheri_abi': '-cheriabi',
       }],
     ],
